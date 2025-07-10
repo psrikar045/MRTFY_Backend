@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Local Development)
+  # Note: You're using AWS RDS in production, this is for local testing
+  postgres:
+    image: postgres:13-alpine
+    container_name: jwt-postgres-local
+    environment:
+      POSTGRES_DB: myprojectdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: srikar045
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - jwt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myprojectdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # JWT Authenticator Application
+  jwt-app:
+    build: .
+    container_name: jwt-authenticator
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration (Local Docker PostgreSQL)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/myprojectdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: srikar045
+      
+      # Application URLs
+      APP_BASE_URL: http://localhost:8080
+      APP_FRONTEND_URL: http://localhost:3000
+      
+      # JWT Configuration (Your actual secret)
+      JWT_SECRET: yourSuperSecretKeyThatIsAtLeast256BitsLongAndShouldBeStoredSecurely
+      JWT_EXPIRATION: 86400000
+      
+      # Email Configuration (Your actual Gmail settings)
+      SPRING_MAIL_HOST: smtp.gmail.com
+      SPRING_MAIL_PORT: 587
+      SPRING_MAIL_USERNAME: tyedukondalu@stratapps.com
+      SPRING_MAIL_PASSWORD: whesvjdtjmyhgwwt
+      
+      # Google OAuth2 (Your actual client ID)
+      GOOGLE_CLIENT_ID: 333815600502-fcfheqik99ceft5sq5nk4f8ae5aialec.apps.googleusercontent.com
+      
+      # Profile
+      SPRING_PROFILES_ACTIVE: postgres
+      
+      # JVM Options
+      JAVA_OPTS: -Xmx512m -Xms256m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jwt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+
+networks:
+  jwt-network:
+    driver: bridge
