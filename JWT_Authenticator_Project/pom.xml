@@ -158,7 +158,6 @@
                 <configuration>
                     <source>21</source>
                     <target>21</target>
-                    <executable>C:\Program Files\Java\jdk-21\bin\javac</executable>
                     <fork>true</fork>
                 </configuration>
             </plugin>

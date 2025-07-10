@@ -90,7 +90,7 @@ public class SecurityConfig {
             "https://accounts.google.com" // Google Sign-In
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Tenant-Id", "X-Forward-URL"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Brand-Id", "X-Forward-URL"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
