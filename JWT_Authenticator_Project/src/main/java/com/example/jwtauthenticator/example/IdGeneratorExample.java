@@ -10,11 +10,12 @@ import org.springframework.stereotype.Component;
  * This will run on application startup to show how the ID generator works
  */
 @Component
-public class IdGeneratorExample implements CommandLineRunner {
+public class IdGeneratorExample /*implements CommandLineRunner*/ {
 
     @Autowired
     private IdGeneratorService idGeneratorService;
 
+    /*
     @Override
     public void run(String... args) throws Exception {
         System.out.println("\n=== ID Generator Example ===");
@@ -57,4 +58,5 @@ public class IdGeneratorExample implements CommandLineRunner {
         
         System.out.println("\n=== ID Generator Example Complete ===\n");
     }
+    */
 }
