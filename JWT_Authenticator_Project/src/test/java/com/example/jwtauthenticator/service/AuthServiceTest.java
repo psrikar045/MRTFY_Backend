@@ -1,5 +1,6 @@
 package com.example.jwtauthenticator.service;
 
+import com.example.jwtauthenticator.dto.RegisterResponse;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
@@ -88,7 +89,7 @@ public class AuthServiceTest {
         when(userRepository.existsByEmailAndBrandId(anyString(), anyString())).thenReturn(false);
         when(userDetailsService.save(any(User.class))).thenReturn(user);
 
-        String response = authService.registerUser(registerRequest);
+        RegisterResponse response = authService.registerUser(registerRequest);
 
         assertEquals("User registered successfully. Please verify your email.", response);
         verify(userDetailsService, times(1)).save(any(User.class));
