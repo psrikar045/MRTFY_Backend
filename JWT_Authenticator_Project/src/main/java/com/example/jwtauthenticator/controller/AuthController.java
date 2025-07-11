@@ -447,6 +447,27 @@ public class AuthController {
         }
     }
 
+    // Forgot Password using userId and email
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordCodeRequest request) {
+        try {
+            String result = authService.sendPasswordResetCode(request);
+            return ResponseEntity.ok(Map.of("message", result));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // Verify code using userId and email
+    @PostMapping("/verify-code")
+    public ResponseEntity<?> verifyCode(@Valid @RequestBody VerifyCodeWithUserRequest request) {
+        String result = authService.verifyResetCode(request);
+        if (result.startsWith("Invalid") || result.startsWith("Verification code has expired")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", result));
+        }
+        return ResponseEntity.ok(Map.of("message", result));
+    }
+
     // Enhanced Forgot Password - Send Verification Code
     @PostMapping("/forgot-password-code")
     @Operation(summary = "Send password reset verification code", description = "Send a verification code to the user's email for password reset")
