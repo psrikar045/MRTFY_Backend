@@ -52,7 +52,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Check if Authorization header is present and valid
+        // For protected endpoints, check if Authorization header is present and valid
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, 
                 "Authorization header is missing or invalid", 
@@ -74,7 +74,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // Validate X-Brand-Id header is present
+            // Validate X-Brand-Id header is present for protected endpoints
             if (brandId == null || brandId.isEmpty()) {
                 sendErrorResponse(response, HttpStatus.BAD_REQUEST, 
                     "X-Brand-Id header is missing", 
@@ -118,14 +118,25 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private boolean isPublicEndpoint(String path) {
         return path.startsWith("/auth/login") || 
                path.startsWith("/auth/token") || 
+               path.startsWith("/auth/login/email") ||
+               path.startsWith("/auth/login/username") ||
                path.startsWith("/auth/register") || 
+               path.startsWith("/auth/forgot-password") || 
+               path.startsWith("/auth/reset-password") ||
+               path.startsWith("/auth/refresh") ||
+               path.startsWith("/auth/forward") ||
+               path.startsWith("/auth/forgot-password-code") || 
+               path.startsWith("/auth/verify-reset-code") ||
+               path.startsWith("/auth/check-email") ||
+               path.startsWith("/auth/set-new-password") ||
                path.startsWith("/auth/google") ||
                path.startsWith("/auth/verify-email") ||
-               path.startsWith("/auth/forgot-password") ||
-               path.startsWith("/auth/check-email") ||
+               path.startsWith("/auth/tfa/") ||
                path.startsWith("/test/") ||
                path.startsWith("/swagger-ui") ||
                path.startsWith("/v3/api-docs") ||
+               path.startsWith("/api/id-generator/user-id/init-sequence") ||
+               path.startsWith("/actuator/health") ||
                path.equals("/hello");
     }
     

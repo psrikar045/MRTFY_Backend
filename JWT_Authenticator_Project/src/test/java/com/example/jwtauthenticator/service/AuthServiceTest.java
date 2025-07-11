@@ -2,10 +2,12 @@ package com.example.jwtauthenticator.service;
 
 import com.example.jwtauthenticator.config.AppConfig;
 import com.example.jwtauthenticator.dto.RegisterResponse;
+import com.example.jwtauthenticator.entity.LoginLog;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
 import com.example.jwtauthenticator.model.RegisterRequest;
+import com.example.jwtauthenticator.repository.LoginLogRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
 import com.example.jwtauthenticator.util.JwtUtil;
@@ -26,6 +28,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,10 +53,13 @@ public class AuthServiceTest {
     private PasswordEncoder passwordEncoder;
     
     @Mock
-    private IdGeneratorService idGeneratorService;
+    private com.example.jwtauthenticator.service.IdGeneratorService idGeneratorService;
     
     @Mock
     private AppConfig appConfig;
+    
+    @Mock
+    private LoginLogRepository loginLogRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -95,7 +101,7 @@ public class AuthServiceTest {
         when(userRepository.existsByUsernameAndBrandId(anyString(), anyString())).thenReturn(false);
         when(userRepository.existsByEmailAndBrandId(anyString(), anyString())).thenReturn(false);
         when(userDetailsService.save(any(User.class))).thenReturn(user);
-        when(idGeneratorService.generateDombrUserId()).thenReturn("DOMBR000001");
+        // We don't need to mock idGeneratorService.generateDombrUserId() anymore since it's commented out in the code
         when(appConfig.getApiUrl(anyString())).thenReturn("http://localhost:8080/api/auth/verify-email?token=test-token");
 
         RegisterResponse response = authService.registerUser(registerRequest);
@@ -108,7 +114,7 @@ public class AuthServiceTest {
     @Test
     void registerUser_usernameExists() {
         when(userRepository.existsByUsernameAndBrandId(anyString(), anyString())).thenReturn(true);
-        when(idGeneratorService.generateDombrUserId()).thenReturn("DOMBR000001");
+        // We don't need to mock idGeneratorService.generateDombrUserId() anymore since it's commented out in the code
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> authService.registerUser(registerRequest));
         assertEquals("Username already exists for this brand", thrown.getMessage());
@@ -121,6 +127,10 @@ public class AuthServiceTest {
         when(userDetailsService.loadUserByUsernameAndBrandId(anyString(), anyString())).thenReturn(userDetails);
         when(jwtUtil.generateToken(any(UserDetails.class), anyString())).thenReturn("jwtToken");
         when(jwtUtil.generateRefreshToken(any(UserDetails.class), anyString())).thenReturn("refreshToken");
+        
+        // Mock login log repository behavior
+        when(loginLogRepository.findTopByUserIdAndLoginStatusOrderByLoginTimeDesc(any(UUID.class), eq("SUCCESS")))
+            .thenReturn(Optional.empty());
 
         AuthResponse response = authService.createAuthenticationToken(authRequest);
 
@@ -128,6 +138,7 @@ public class AuthServiceTest {
         assertEquals("jwtToken", response.token());
         assertEquals("refreshToken", response.refreshToken());
         verify(userRepository, times(1)).save(any(User.class)); // For refresh token update
+        verify(loginLogRepository, times(1)).save(any(LoginLog.class)); // Verify login log is saved
     }
 
     @Test
@@ -136,9 +147,16 @@ public class AuthServiceTest {
         when(userRepository.findByUsernameAndBrandId(anyString(), anyString())).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
         when(userDetailsService.loadUserByUsernameAndBrandId(anyString(), anyString())).thenReturn(userDetails);
+        
+        // Mock login log repository behavior for failure log
+        when(loginLogRepository.findTopByUserIdAndLoginStatusOrderByLoginTimeDesc(any(UUID.class), eq("FAILURE")))
+            .thenReturn(Optional.empty());
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> authService.createAuthenticationToken(authRequest));
         assertEquals("Email not verified. Please verify your email to login.", thrown.getMessage());
+        
+        // Verify that a failure login log was saved
+        verify(loginLogRepository, times(1)).save(any(LoginLog.class));
     }
 
     @Test

@@ -339,7 +339,7 @@ public class AuthController {
     }
 
     @PostMapping("/forward")
-    public ResponseEntity<?> forwardRequest(@Valid @RequestBody AuthRequest authenticationRequest, @RequestHeader(value = "X-Forward-URL") String forwardUrl) throws Exception {
+    public ResponseEntity<?> forwardRequest(@Valid @RequestBody AuthRequest authenticationRequest, @RequestHeader(value = "X-Forward-URL", required = true) String forwardUrl) throws Exception {
         // Authenticate user and get JWT token
         AuthResponse authResponse = authService.loginUser(authenticationRequest);
         String token = authResponse.token();

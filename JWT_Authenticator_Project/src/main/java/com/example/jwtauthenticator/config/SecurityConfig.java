@@ -63,14 +63,38 @@ public class SecurityConfig {
                         .maxAgeInSeconds(31536000))
                 )
                 .authorizeHttpRequests(authz -> authz
-                    .requestMatchers("/auth/register", "/auth/token", "/auth/login", "/auth/forward", 
-                                   "/auth/forgot-password", "/auth/reset-password", "/auth/refresh", 
-                                   "/auth/verify-email", "/auth/tfa/**", "/auth/google", "/test/**", 
-                                   "/auth/check-email", "/auth/forgot-password-code", 
-                                   "/auth/verify-reset-code", "/auth/set-new-password",
-                                   "/api/id-generator/user-id/init-sequence",
-                                   "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", 
-                                   "/actuator/health").permitAll()
+                    .requestMatchers(
+                        // Authentication endpoints
+                        "/auth/register", 
+                        "/auth/token", 
+                        "/auth/login", 
+                        "/auth/login/**",  // Includes /login/username and /login/email
+                        "/auth/forward", 
+                        "/auth/forgot-password", 
+                        "/auth/reset-password", 
+                        "/auth/refresh", 
+                        "/auth/verify-email", 
+                        "/auth/google", 
+                        "/auth/check-email", 
+                        "/auth/forgot-password-code", 
+                        "/auth/verify-reset-code", 
+                        "/auth/set-new-password",
+                        
+                        // 2FA endpoints
+                        "/auth/tfa/**", 
+                        
+                        // Other public endpoints
+                        "/test/**", 
+                        "/api/id-generator/user-id/init-sequence",
+                        
+                        // Documentation
+                        "/v3/api-docs/**", 
+                        "/swagger-ui/**", 
+                        "/swagger-ui.html", 
+                        
+                        // Health check
+                        "/actuator/health"
+                    ).permitAll()
                     .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

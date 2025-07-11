@@ -71,24 +71,24 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse registerUser(RegisterRequest request) {
-        // Generate the sequential user ID
-        String dombrId;
-        try {
-            // Try to use the database sequence
-            dombrId = idGeneratorService.generateDombrUserId();
-            log.info("Generated sequential user ID: {}", dombrId);
-        } catch (Exception e) {
-            // If that fails, use the simple method
-            log.error("Failed to generate ID using sequence: {}", e.getMessage());
-            dombrId = idGeneratorService.generateSimpleDombrUserId();
-            log.info("Generated simple sequential user ID: {}", dombrId);
-        }
-        
-        // If we still don't have an ID, use a hardcoded one as last resort
-        if (dombrId == null) {
-            dombrId = "DOMBR000001";
-            log.warn("Using hardcoded ID as last resort: {}", dombrId);
-        }
+//        // Generate the sequential user ID
+//        String dombrId;
+//        try {
+//            // Try to use the database sequence
+//            dombrId = idGeneratorService.generateDombrUserId();
+//            log.info("Generated sequential user ID: {}", dombrId);
+//        } catch (Exception e) {
+//            // If that fails, use the simple method
+//            log.error("Failed to generate ID using sequence: {}", e.getMessage());
+//            dombrId = idGeneratorService.generateSimpleDombrUserId();
+//            log.info("Generated simple sequential user ID: {}", dombrId);
+//        }
+//        
+//        // If we still don't have an ID, use a hardcoded one as last resort
+//        if (dombrId == null) {
+//            dombrId = "DOMBR000001";
+//            log.warn("Using hardcoded ID as last resort: {}", dombrId);
+//        }
         // Auto-generate brandId if not provided
         String brandId = request.brandId();
         if (brandId == null || brandId.trim().isEmpty()) {
@@ -108,7 +108,7 @@ public class AuthService {
         }
         
         User newUser = User.builder()
-                .id(dombrId) // Set as primary key
+                .id(brandId) // Set as primary key
                 .username(request.username())
                 .password(request.password())
                 .email(request.email())
@@ -117,7 +117,7 @@ public class AuthService {
                 .phoneNumber(request.phoneNumber())
                 .location(request.location())
                 .role(Role.USER) // Default role
-                .brandId(brandId)
+                .brandId(null)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .emailVerified(false)
@@ -141,26 +141,41 @@ public class AuthService {
     }
 
     public AuthResponse createAuthenticationToken(AuthRequest authenticationRequest) throws Exception {
-        authenticate(authenticationRequest.username(), authenticationRequest.password(), authenticationRequest.brandId());
-        final UserDetails userDetails = userDetailsService
-                .loadUserByUsernameAndBrandId(authenticationRequest.username(), authenticationRequest.brandId());
-        User user = userRepository.findByUsernameAndBrandId(authenticationRequest.username(), authenticationRequest.brandId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (!user.isEmailVerified()) {
-            throw new RuntimeException("Email not verified. Please verify your email to login.");
+        try {
+            authenticate(authenticationRequest.username(), authenticationRequest.password(), authenticationRequest.brandId());
+            final UserDetails userDetails = userDetailsService
+                    .loadUserByUsernameAndBrandId(authenticationRequest.username(), authenticationRequest.brandId());
+            User user = userRepository.findByUsernameAndBrandId(authenticationRequest.username(), authenticationRequest.brandId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+    
+            if (!user.isEmailVerified()) {
+                // Log failure due to unverified email
+                logLogin(user, "PASSWORD", "FAILURE", "Login failed: Email not verified");
+                throw new RuntimeException("Email not verified. Please verify your email to login.");
+            }
+    
+            final String token = jwtUtil.generateToken(userDetails, user.getUserId().toString());
+            final String refreshToken = jwtUtil.generateRefreshToken(userDetails, user.getUserId().toString());
+    
+            user.setRefreshToken(refreshToken);
+            userRepository.save(user);
+    
+            // Log successful password login
+            logLogin(user, "PASSWORD", "SUCCESS", "Password login successful");
+    
+            return new AuthResponse(token, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
+        } catch (Exception e) {
+            // If the exception wasn't already logged in the authenticate method, log it here
+            if (!(e.getCause() instanceof BadCredentialsException)) {
+                // Create a temporary user object just for logging if needed
+                User tempUser = new User();
+                tempUser.setUsername(authenticationRequest.username());
+                tempUser.setBrandId(authenticationRequest.brandId());
+                tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+                logLogin(tempUser, "PASSWORD", "FAILURE", "Authentication failed: " + e.getMessage());
+            }
+            throw e;
         }
-
-        final String token = jwtUtil.generateToken(userDetails, user.getUserId().toString());
-        final String refreshToken = jwtUtil.generateRefreshToken(userDetails, user.getUserId().toString());
-
-        user.setRefreshToken(refreshToken);
-        userRepository.save(user);
-
-        // Log successful password login
-        logLogin(user, "PASSWORD", "SUCCESS", "Password login successful");
-
-        return new AuthResponse(token, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     public AuthResponse loginUser(AuthRequest authenticationRequest) throws Exception {
@@ -168,21 +183,52 @@ public class AuthService {
     }
     
     public AuthResponse loginWithUsername(String username, String password) throws Exception {
-        // Find user by username (across all brands)
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
-        
-        // Authenticate with the found user's brandId
-        return authenticateAndGenerateToken(username, password, user.getBrandId());
+        try {
+            // Find user by username (across all brands)
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+            
+            // Authenticate with the found user's brandId
+            return authenticateAndGenerateToken(username, password, user.getBrandId());
+        } catch (Exception e) {
+            // Log failed login attempt
+            Optional<User> userOpt = userRepository.findByUsername(username);
+            if (userOpt.isPresent()) {
+                logLogin(userOpt.get(), "PASSWORD", "FAILURE", "Username login failed: " + e.getMessage());
+            } else {
+                // User not found, create a temporary user object just for logging
+                User tempUser = new User();
+                tempUser.setUsername(username);
+                tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+                logLogin(tempUser, "PASSWORD", "FAILURE", "User not found with provided username");
+            }
+            throw e;
+        }
     }
     
     public AuthResponse loginWithEmail(String email, String password) throws Exception {
-        // Find user by email (across all brands)
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
-        
-        // Authenticate with the found user's brandId
-        return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+        try {
+            // Find user by email (across all brands)
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+            
+            // Authenticate with the found user's brandId
+            return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+        } catch (Exception e) {
+            // Log failed login attempt
+            Optional<User> userOpt = userRepository.findByEmail(email);
+            if (userOpt.isPresent()) {
+                logLogin(userOpt.get(), "PASSWORD", "FAILURE", "Email login failed: " + e.getMessage());
+            } else {
+                // User not found, create a temporary user object just for logging
+                User tempUser = new User();
+                tempUser.setEmail(email);
+                tempUser.setUsername(email.split("@")[0]); // Use part before @ as username
+                tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+                logLogin(tempUser, "PASSWORD", "FAILURE", "User not found with provided email");
+            }
+            throw e;
+        }
     }
     
     private AuthResponse authenticateAndGenerateToken(String username, String password, String brandId) throws Exception {
@@ -248,12 +294,27 @@ public class AuthService {
                     .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
             
             if (!passwordEncoder.matches(password, user.getPassword())) {
+                // Log failed login attempt due to wrong password
+                logLogin(user, "PASSWORD", "FAILURE", "Invalid password provided");
                 throw new BadCredentialsException("Invalid credentials");
             }
             
             // Additional checks can be added here (e.g., account enabled, not locked, etc.)
             
         } catch (BadCredentialsException e) {
+            // Try to find user just for logging purposes
+            Optional<User> userOpt = userRepository.findByUsernameAndBrandId(username, brandId);
+            if (userOpt.isPresent()) {
+                // We found the user, so log the failure
+                logLogin(userOpt.get(), "PASSWORD", "FAILURE", "Authentication failed: " + e.getMessage());
+            } else {
+                // User not found, create a temporary user object just for logging
+                User tempUser = new User();
+                tempUser.setUsername(username);
+                tempUser.setBrandId(brandId);
+                tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+                logLogin(tempUser, "PASSWORD", "FAILURE", "User not found with provided credentials");
+            }
             throw new Exception("INVALID_CREDENTIALS", e);
         }
     }
@@ -305,6 +366,13 @@ public class AuthService {
             }
             
         } catch (Exception e) {
+            // Create a temporary user for logging the failure
+            // Since we don't have the email from the request directly, we'll just log with a generic user
+            User tempUser = new User();
+            tempUser.setUsername("google_signin_attempt");
+            tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+            logLogin(tempUser, "GOOGLE", "FAILURE", "Google Sign-In failed: " + e.getMessage());
+            
             throw new Exception("Google Sign-In failed: " + e.getMessage(), e);
         }
     }
@@ -386,20 +454,52 @@ public class AuthService {
         return new AuthResponse(accessToken, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
+    /**
+     * Logs a login event, maintaining only the most recent success and failure records for each user.
+     * For each user, the system keeps only two records:
+     * 1. The most recent successful login
+     * 2. The most recent failed login
+     * 
+     * @param user The user who attempted to log in
+     * @param loginMethod The login method used (PASSWORD, GOOGLE, etc.)
+     * @param loginStatus The login status (SUCCESS or FAILURE)
+     * @param details Additional details about the login attempt
+     */
     private void logLogin(User user, String loginMethod, String loginStatus, String details) {
         try {
-            LoginLog loginLog = LoginLog.builder()
-                    .userId(user.getUserId())
-                    .username(user.getUsername())
-                    .loginMethod(loginMethod)
-                    .loginStatus(loginStatus)
-                    .details(details)
-                    .build();
+            if (user == null || user.getUserId() == null) {
+                log.warn("Cannot log login event: User or user ID is null");
+                return;
+            }
             
+            // Check if there's an existing record for this user with the same login status
+            Optional<LoginLog> existingLogOpt = loginLogRepository
+                .findTopByUserIdAndLoginStatusOrderByLoginTimeDesc(user.getUserId(), loginStatus);
+            
+            LoginLog loginLog;
+            
+            if (existingLogOpt.isPresent()) {
+                // Update the existing record with new timestamp and details
+                loginLog = existingLogOpt.get();
+                loginLog.setLoginTime(LocalDateTime.now());
+                loginLog.setLoginMethod(loginMethod);
+                loginLog.setDetails(details);
+            } else {
+                // Create a new record
+                loginLog = LoginLog.builder()
+                        .userId(user.getUserId())
+                        .username(user.getUsername())
+                        .loginMethod(loginMethod)
+                        .loginStatus(loginStatus)
+                        .details(details)
+                        .build();
+            }
+            
+            // Save the record
             loginLogRepository.save(loginLog);
-            System.out.println("LOGIN_LOG: " + user.getUsername() + " - " + loginMethod + " - " + loginStatus);
+            log.info("LOGIN_LOG: {} - {} - {}", user.getUsername(), loginMethod, loginStatus);
         } catch (Exception e) {
-            System.err.println("Failed to log login event: " + e.getMessage());
+            log.error("Failed to log login event: {}", e.getMessage());
         }
     }
 
