@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -80,7 +81,7 @@ public class ForwardController {
         return ResponseEntity.status(status).body(buildErrorMap(message, status));
     }
 
-    private Map<String, Object> buildErrorMap(String message, HttpStatus status) {
+    private Map<String, Object> buildErrorMap(String message, HttpStatusCode status) {
         Map<String, Object> body = new HashMap<>();
         body.put("error", message);
         body.put("status", status.value());
