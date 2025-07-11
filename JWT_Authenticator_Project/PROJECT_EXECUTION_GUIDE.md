@@ -63,6 +63,27 @@ To use Google Sign-In:
 - Multi-tenant architecture ensures data isolation
 - Two-factor authentication adds an extra layer of security
 
+## Endpoint Authentication Requirements
+
+| Endpoint | Authentication | Type |
+| --- | --- | --- |
+| `POST /auth/register` | Not required | - |
+| `POST /auth/token` | Not required | - |
+| `POST /auth/login` | Not required | - |
+| `POST /auth/login/username` | Not required | - |
+| `POST /auth/login/email` | Not required | - |
+| `POST /auth/refresh` | Not required (requires refresh token body) | - |
+| `PUT /auth/profile` | Required | Bearer token & `X-Brand-Id` |
+| `POST /auth/check-email` | Not required | - |
+| `POST /auth/forgot-password` | Not required | - |
+| `POST /auth/forgot-password-code` | Not required | - |
+| `POST /auth/verify-reset-code` | Not required | - |
+| `POST /auth/set-new-password` | Not required | - |
+| `GET /api/protected` | Required | Bearer token & `X-Brand-Id` |
+| `POST /forward` | Required | Bearer token & `X-Brand-Id` |
+| `POST /api/id-generator/generate` | Not required | - |
+| `POST /api/id-generator/generate/{prefix}` | Not required | - |
+
 ## API Documentation
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - API Docs: http://localhost:8080/v3/api-docs

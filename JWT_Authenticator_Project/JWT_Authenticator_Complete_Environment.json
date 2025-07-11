@@ -88,6 +88,12 @@
       "enabled": true
     },
     {
+      "key": "resetCode",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "googleIdToken",
       "value": "",
       "type": "secret",
