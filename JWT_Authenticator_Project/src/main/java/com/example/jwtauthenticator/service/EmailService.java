@@ -67,4 +67,17 @@ public class EmailService {
             
         sendEmail(to, subject, emailBody);
     }
+
+    /**
+     * Send a 6-digit verification code for password reset.
+     *
+     * @param to   recipient email
+     * @param code 6-digit verification code
+     */
+    public void sendPasswordResetCodeEmail(String to, String code) {
+        String subject = "Password Reset Verification Code";
+        String emailBody = "Your verification code is: " + code +
+                ". It will expire in 10 minutes. Use this code to reset your password.";
+        sendEmail(to, subject, emailBody);
+    }
 }

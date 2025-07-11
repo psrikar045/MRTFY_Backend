@@ -445,18 +445,14 @@ public class AuthService {
     // Enhanced Forgot Password with Verification Code
     @Transactional
     public String sendPasswordResetCode(ForgotPasswordRequest request) {
-        // Check if user exists
         if (!userRepository.existsByEmailAndBrandId(request.email(), request.brandId())) {
             throw new RuntimeException("No account found with this email address");
         }
 
-        // Clean up any existing codes for this email
         passwordResetCodeRepository.deleteByEmailAndBrandId(request.email(), request.brandId());
 
-        // Generate 6-digit verification code
         String code = generateVerificationCode();
 
-        // Save the code
         PasswordResetCode resetCode = PasswordResetCode.builder()
                 .email(request.email())
                 .brandId(request.brandId())
@@ -465,11 +461,42 @@ public class AuthService {
 
         passwordResetCodeRepository.save(resetCode);
 
-        // TODO: Send email with verification code
-        // For now, we'll just return the code (in production, this should be sent via email)
-        System.out.println("Password reset code for " + request.email() + ": " + code);
+        emailService.sendPasswordResetCodeEmail(request.email(), code);
 
         return "Verification code sent to your email address";
+    }
+
+    // Forgot password using userId and email
+    @Transactional
+    public String sendPasswordResetCode(ForgotPasswordCodeRequest request) {
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(request.userId());
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid user ID format");
+        }
+
+        Optional<User> userOpt = userRepository.findByUserId(uuid);
+        if (userOpt.isEmpty() || !userOpt.get().getEmail().equals(request.email())) {
+            // Generic response if user not found or email mismatch
+            return "If the user ID and email are registered, a verification code will be sent.";
+        }
+
+        passwordResetCodeRepository.deleteByEmailAndBrandId(request.email(), request.userId());
+
+        String code = generateVerificationCode();
+
+        PasswordResetCode resetCode = PasswordResetCode.builder()
+                .email(request.email())
+                .brandId(request.userId())
+                .code(code)
+                .build();
+
+        passwordResetCodeRepository.save(resetCode);
+
+        emailService.sendPasswordResetCodeEmail(request.email(), code);
+
+        return "Verification code sent successfully.";
     }
 
     // Verify Reset Code Method - Only verify, don't mark as used yet
@@ -486,8 +513,29 @@ public class AuthService {
             throw new RuntimeException("Verification code has expired");
         }
 
-        // Don't mark as used here - just verify it's valid
         return "Verification code is valid. You can now proceed to reset your password.";
+    }
+
+    // Verify code using userId and email - marks the code as used
+    @Transactional
+    public String verifyResetCode(VerifyCodeWithUserRequest request) {
+        Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
+                .findByEmailAndBrandIdAndCodeAndUsedFalse(request.email(), request.userId(), request.code());
+
+        if (resetCodeOpt.isEmpty()) {
+            return "Invalid verification code.";
+        }
+
+        PasswordResetCode resetCode = resetCodeOpt.get();
+        if (resetCode.isExpired()) {
+            passwordResetCodeRepository.delete(resetCode);
+            return "Verification code has expired.";
+        }
+
+        resetCode.setUsed(true);
+        passwordResetCodeRepository.save(resetCode);
+
+        return "Code verified successfully. Proceed to set a new password.";
     }
 
     // Set New Password Method - Only works after code verification

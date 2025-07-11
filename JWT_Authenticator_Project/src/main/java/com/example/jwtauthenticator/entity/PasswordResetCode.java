@@ -41,7 +41,7 @@ public class PasswordResetCode {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
-        expiresAt = LocalDateTime.now().plusMinutes(15); // Code expires in 15 minutes
+        expiresAt = LocalDateTime.now().plusMinutes(10); // Code expires in 10 minutes
         used = false;
     }
 
