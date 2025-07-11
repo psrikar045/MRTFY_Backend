@@ -4,7 +4,7 @@
     "name": "JWT Authenticator API - Complete Collection",
     "description": "Complete API collection for JWT Authenticator microservice with authentication, 2FA, password reset, request forwarding, ID generation, and more.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "item": [
     {
@@ -406,6 +406,87 @@
               ]
             },
             "description": "Request password reset email"
+          }
+        },
+        {
+          "name": "Forgot Password Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password-code"
+              ]
+            },
+            "description": "Send verification code for password reset"
+          }
+        },
+        {
+          "name": "Verify Reset Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testEmail}}\",\n    \"code\": \"{{resetCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-reset-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-reset-code"
+              ]
+            },
+            "description": "Verify password reset code"
+          }
+        },
+        {
+          "name": "Set New Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+                "raw": "{\n    \"email\": \"{{testEmail}}\",\n    \"code\": \"{{resetCode}}\",\n    \"newPassword\": \"NewSecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/set-new-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "set-new-password"
+              ]
+            },
+            "description": "Reset password using verification code"
           }
         },
         {
