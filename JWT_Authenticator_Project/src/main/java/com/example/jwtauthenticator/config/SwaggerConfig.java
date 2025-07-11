@@ -47,16 +47,27 @@ public class SwaggerConfig {
                         new Server()
                                 .url("http://localhost:8080")
                                 .description("Local Development Fallback")))
-                .addSecurityItem(new SecurityRequirement().addList("Bearer Authentication"))
+                .addSecurityItem(new SecurityRequirement()
+                        .addList("Bearer Authentication")
+                        .addList("X-Brand-Id"))
                 .components(new Components()
-                        .addSecuritySchemes("Bearer Authentication", createAPIKeyScheme()));
+                        .addSecuritySchemes("Bearer Authentication", createJWTScheme())
+                        .addSecuritySchemes("X-Brand-Id", createBrandIdScheme()));
     }
 
-    private SecurityScheme createAPIKeyScheme() {
+    private SecurityScheme createJWTScheme() {
         return new SecurityScheme()
                 .type(SecurityScheme.Type.HTTP)
                 .bearerFormat("JWT")
                 .scheme("bearer")
                 .description("Enter JWT Bearer token in the format: Bearer {token}");
+    }
+    
+    private SecurityScheme createBrandIdScheme() {
+        return new SecurityScheme()
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.HEADER)
+                .name("X-Brand-Id")
+                .description("Brand identifier for multi-tenant support (e.g., brand1, brand2)");
     }
 }

@@ -1,5 +1,6 @@
 package com.example.jwtauthenticator.service;
 
+import com.example.jwtauthenticator.config.AppConfig;
 import com.example.jwtauthenticator.dto.RegisterResponse;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.model.AuthRequest;
@@ -47,6 +48,12 @@ public class AuthServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+    
+    @Mock
+    private IdGeneratorService idGeneratorService;
+    
+    @Mock
+    private AppConfig appConfig;
 
     @InjectMocks
     private AuthService authService;
@@ -88,10 +95,12 @@ public class AuthServiceTest {
         when(userRepository.existsByUsernameAndBrandId(anyString(), anyString())).thenReturn(false);
         when(userRepository.existsByEmailAndBrandId(anyString(), anyString())).thenReturn(false);
         when(userDetailsService.save(any(User.class))).thenReturn(user);
+        when(idGeneratorService.generateDombrUserId()).thenReturn("DOMBR000001");
+        when(appConfig.getApiUrl(anyString())).thenReturn("http://localhost:8080/api/auth/verify-email?token=test-token");
 
         RegisterResponse response = authService.registerUser(registerRequest);
 
-        assertEquals("User registered successfully. Please verify your email.", response);
+        assertEquals("User registered successfully. Please verify your email.", response.message());
         verify(userDetailsService, times(1)).save(any(User.class));
         verify(emailService, times(1)).sendEmail(anyString(), anyString(), anyString());
     }
@@ -99,6 +108,7 @@ public class AuthServiceTest {
     @Test
     void registerUser_usernameExists() {
         when(userRepository.existsByUsernameAndBrandId(anyString(), anyString())).thenReturn(true);
+        when(idGeneratorService.generateDombrUserId()).thenReturn("DOMBR000001");
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> authService.registerUser(registerRequest));
         assertEquals("Username already exists for this brand", thrown.getMessage());

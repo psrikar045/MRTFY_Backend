@@ -21,15 +21,14 @@ import java.util.UUID;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
-    private Long id;
-
+    @Column(name = "id", length = 11)
+    private String id; // Primary key using DOMBR format (e.g., DOMBR000001)
+    
     @Column(name = "user_id")
     private UUID userId;
-
+    
     @Column(name = "user_code", unique = true)
-    private String userCode; // Human-readable user ID like USER0001
+    private String userCode; // Keeping for backward compatibility
 
     @NotBlank
     @Column(unique = true)

@@ -16,6 +16,7 @@ import com.example.jwtauthenticator.repository.PasswordResetCodeRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
 import com.example.jwtauthenticator.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -32,6 +33,7 @@ import java.util.UUID;
 import jakarta.transaction.Transactional;
 
 @Service
+@Slf4j
 public class AuthService {
 
     @Autowired
@@ -67,11 +69,35 @@ public class AuthService {
     @Autowired
     private IdGeneratorService idGeneratorService;
 
+    @Transactional
     public RegisterResponse registerUser(RegisterRequest request) {
+        // Generate the sequential user ID
+        String dombrId;
+        try {
+            // Try to use the database sequence
+            dombrId = idGeneratorService.generateDombrUserId();
+            log.info("Generated sequential user ID: {}", dombrId);
+        } catch (Exception e) {
+            // If that fails, use the simple method
+            log.error("Failed to generate ID using sequence: {}", e.getMessage());
+            dombrId = idGeneratorService.generateSimpleDombrUserId();
+            log.info("Generated simple sequential user ID: {}", dombrId);
+        }
+        
+        // If we still don't have an ID, use a hardcoded one as last resort
+        if (dombrId == null) {
+            dombrId = "DOMBR000001";
+            log.warn("Using hardcoded ID as last resort: {}", dombrId);
+        }
         // Auto-generate brandId if not provided
         String brandId = request.brandId();
         if (brandId == null || brandId.trim().isEmpty()) {
-            brandId = idGeneratorService.generateNextId(); // Uses default prefix from application.properties
+            try {
+                brandId = idGeneratorService.generateNextId(); // Uses default prefix from application.properties
+            } catch (Exception e) {
+                log.error("Error generating brand ID, using default", e);
+                brandId = "MRTFY" + String.format("%04d", System.currentTimeMillis() % 10000);
+            }
         }
         
         if (userRepository.existsByUsernameAndBrandId(request.username(), brandId)) {
@@ -80,8 +106,9 @@ public class AuthService {
         if (userRepository.existsByEmailAndBrandId(request.email(), brandId)) {
             throw new RuntimeException("Email already exists for this brand");
         }
-
+        
         User newUser = User.builder()
+                .id(dombrId) // Set as primary key
                 .username(request.username())
                 .password(request.password())
                 .email(request.email())
@@ -133,11 +160,52 @@ public class AuthService {
         // Log successful password login
         logLogin(user, "PASSWORD", "SUCCESS", "Password login successful");
 
-        return new AuthResponse(token, refreshToken);
+        return new AuthResponse(token, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     public AuthResponse loginUser(AuthRequest authenticationRequest) throws Exception {
         return createAuthenticationToken(authenticationRequest);
+    }
+    
+    public AuthResponse loginWithUsername(String username, String password) throws Exception {
+        // Find user by username (across all brands)
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+        
+        // Authenticate with the found user's brandId
+        return authenticateAndGenerateToken(username, password, user.getBrandId());
+    }
+    
+    public AuthResponse loginWithEmail(String email, String password) throws Exception {
+        // Find user by email (across all brands)
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+        
+        // Authenticate with the found user's brandId
+        return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+    }
+    
+    private AuthResponse authenticateAndGenerateToken(String username, String password, String brandId) throws Exception {
+        authenticate(username, password, brandId);
+        
+        final UserDetails userDetails = userDetailsService.loadUserByUsernameAndBrandId(username, brandId);
+        User user = userRepository.findByUsernameAndBrandId(username, brandId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!user.isEmailVerified()) {
+            throw new RuntimeException("Email not verified. Please verify your email to login.");
+        }
+
+        final String token = jwtUtil.generateToken(userDetails, user.getUserId().toString());
+        final String refreshToken = jwtUtil.generateRefreshToken(userDetails, user.getUserId().toString());
+
+        user.setRefreshToken(refreshToken);
+        userRepository.save(user);
+
+        // Log successful password login
+        logLogin(user, "PASSWORD", "SUCCESS", "Password login successful");
+
+        return new AuthResponse(token, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     public AuthResponse refreshToken(String oldRefreshToken) throws Exception {
@@ -160,7 +228,7 @@ public class AuthService {
         user.setRefreshToken(newRefreshToken);
         userRepository.save(user);
 
-        return new AuthResponse(newToken, newRefreshToken);
+        return new AuthResponse(newToken, newRefreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     public String verifyEmail(String token) {
@@ -257,7 +325,27 @@ public class AuthService {
             }
         }
         
+        // Generate the sequential user ID
+        String dombrId;
+        try {
+            // Try to use the database sequence
+            dombrId = idGeneratorService.generateDombrUserId();
+            log.info("Generated sequential user ID for Google user: {}", dombrId);
+        } catch (Exception e) {
+            // If that fails, use the simple method
+            log.error("Failed to generate ID using sequence for Google user: {}", e.getMessage());
+            dombrId = idGeneratorService.generateSimpleDombrUserId();
+            log.info("Generated simple sequential user ID for Google user: {}", dombrId);
+        }
+        
+        // If we still don't have an ID, use a hardcoded one as last resort
+        if (dombrId == null) {
+            dombrId = "DOMBR" + String.format("%06d", System.currentTimeMillis() % 1000000);
+            log.warn("Using timestamp-based ID as last resort for Google user: {}", dombrId);
+        }
+        
         return User.builder()
+                .id(dombrId) // Set the DOMBR ID as primary key
                 .username(username)
                 .email(googleUserInfo.getEmail())
                 .firstName(firstName)
@@ -268,6 +356,9 @@ public class AuthService {
                 .emailVerified(true) // Always true for Google users since Google has already verified the email
                 .profilePictureUrl(googleUserInfo.getPicture())
                 .brandId("default") // You can modify this based on your brand logic
+                .userId(UUID.randomUUID()) // Set UUID
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
                 .build();
     }
 
@@ -292,7 +383,7 @@ public class AuthService {
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
         
-        return new AuthResponse(accessToken, refreshToken);
+        return new AuthResponse(accessToken, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     private void logLogin(User user, String loginMethod, String loginStatus, String details) {

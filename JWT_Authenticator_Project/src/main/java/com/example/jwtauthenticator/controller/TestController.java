@@ -1,6 +1,10 @@
 package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.config.AppConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +17,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/test")
+@Tag(name = "Test Endpoints", description = "Endpoints for testing and demonstration purposes")
 public class TestController {
 
     @Autowired
@@ -22,6 +27,13 @@ public class TestController {
     private String googleClientId;
 
     @GetMapping("/google-signin-demo")
+    @Operation(
+        summary = "Google Sign-In Demo Page", 
+        description = "Returns an HTML page with Google Sign-In integration for testing"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "HTML demo page returned successfully")
+    })
     public ResponseEntity<String> getGoogleSignInDemo() {
         String html = "<!DOCTYPE html>" +
             "<html>" +
@@ -93,6 +105,13 @@ public class TestController {
     }
 
     @GetMapping("/status")
+    @Operation(
+        summary = "Get API Status", 
+        description = "Returns information about the API service status and available endpoints"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Status information returned successfully")
+    })
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("service", "JWT Authenticator");
@@ -104,6 +123,7 @@ public class TestController {
         Map<String, String> endpoints = new HashMap<>();
         endpoints.put("googleSignIn", appConfig.getApiUrl("/auth/google"));
         endpoints.put("testPage", appConfig.getApiUrl("/test/google-signin-demo"));
+        endpoints.put("apiDemo", appConfig.getApiUrl("/api-demo.html"));
         endpoints.put("swagger", appConfig.getApiUrl("/swagger-ui.html"));
         endpoints.put("health", appConfig.getApiUrl("/actuator/health"));
         

@@ -2,7 +2,9 @@ package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
+import com.example.jwtauthenticator.model.EmailLoginRequest;
 import com.example.jwtauthenticator.model.RegisterRequest;
+import com.example.jwtauthenticator.model.UsernameLoginRequest;
 import com.example.jwtauthenticator.service.AuthService;
 import com.example.jwtauthenticator.service.PasswordResetService;
 import com.example.jwtauthenticator.service.TfaService;
@@ -17,6 +19,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -69,27 +73,159 @@ public class AuthController {
         }
     }
 
-    @Operation(summary = "Generate authentication token", 
-               description = "Generate JWT access and refresh tokens for authenticated user")
+    @Operation(
+        summary = "Generate authentication token", 
+        description = "Generate JWT access and refresh tokens for authenticated user. Include brandId in the request for multi-tenant support."
+    )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Authentication successful"),
+            @ApiResponse(
+                responseCode = "200", 
+                description = "Authentication successful",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthResponse.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Success Response",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_RESPONSE
+                        )
+                    }
+                )
+            ),
             @ApiResponse(responseCode = "400", description = "Invalid credentials or email not verified")
     })
     @PostMapping("/token")
-    public ResponseEntity<?> createAuthenticationToken(@Valid @RequestBody AuthRequest authenticationRequest) throws Exception {
+    public ResponseEntity<?> createAuthenticationToken(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Authentication request with username, password and optional brandId",
+                required = true,
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthRequest.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Authentication with Brand ID",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_REQUEST_WITH_BRAND
+                        )
+                    }
+                )
+            )
+            @Valid @RequestBody AuthRequest authenticationRequest) throws Exception {
         AuthResponse authResponse = authService.createAuthenticationToken(authenticationRequest);
         return ResponseEntity.ok(authResponse);
     }
 
-    @Operation(summary = "User login", 
-               description = "Authenticate user and return JWT tokens")
+    @Operation(
+        summary = "User login (Legacy)", 
+        description = "Legacy login endpoint. Use /login/username or /login/email instead."
+    )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Login successful"),
+            @ApiResponse(
+                responseCode = "200", 
+                description = "Login successful",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthResponse.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Success Response",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_RESPONSE
+                        )
+                    }
+                )
+            ),
             @ApiResponse(responseCode = "400", description = "Invalid credentials")
     })
     @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@Valid @RequestBody AuthRequest authenticationRequest) throws Exception {
+    public ResponseEntity<?> loginUser(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Authentication request with username, password and optional brandId",
+                required = true,
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthRequest.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Login with Brand ID",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_REQUEST_WITH_BRAND
+                        )
+                    }
+                )
+            )
+            @Valid @RequestBody AuthRequest authenticationRequest) throws Exception {
         AuthResponse authResponse = authService.loginUser(authenticationRequest);
+        return ResponseEntity.ok(authResponse);
+    }
+    
+    @Operation(
+        summary = "Username-based login", 
+        description = "Authenticate user with username and password and return JWT tokens with brandId and expiration time."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                responseCode = "200", 
+                description = "Login successful",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthResponse.class)
+                )
+            ),
+            @ApiResponse(responseCode = "400", description = "Invalid credentials")
+    })
+    @PostMapping("/login/username")
+    public ResponseEntity<?> loginWithUsername(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Username-based login request",
+                required = true,
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = UsernameLoginRequest.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Username Login",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.USERNAME_LOGIN_REQUEST
+                        )
+                    }
+                )
+            )
+            @Valid @RequestBody UsernameLoginRequest loginRequest) throws Exception {
+        AuthResponse authResponse = authService.loginWithUsername(loginRequest.username(), loginRequest.password());
+        return ResponseEntity.ok(authResponse);
+    }
+    
+    @Operation(
+        summary = "Email-based login", 
+        description = "Authenticate user with email and password and return JWT tokens with brandId and expiration time."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                responseCode = "200", 
+                description = "Login successful",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthResponse.class)
+                )
+            ),
+            @ApiResponse(responseCode = "400", description = "Invalid credentials")
+    })
+    @PostMapping("/login/email")
+    public ResponseEntity<?> loginWithEmail(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Email-based login request",
+                required = true,
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = EmailLoginRequest.class),
+                    examples = {
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Email Login",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.EMAIL_LOGIN_REQUEST
+                        )
+                    }
+                )
+            )
+            @Valid @RequestBody EmailLoginRequest loginRequest) throws Exception {
+        AuthResponse authResponse = authService.loginWithEmail(loginRequest.email(), loginRequest.password());
         return ResponseEntity.ok(authResponse);
     }
 
@@ -240,11 +376,31 @@ public class AuthController {
 
     // Profile Update Endpoint
     @PutMapping("/profile")
-    @Operation(summary = "Update user profile", description = "Update user profile information")
+    @Operation(
+        summary = "Update user profile", 
+        description = "Update user profile information",
+        security = { @SecurityRequirement(name = "Bearer Authentication") },
+        parameters = {
+            @Parameter(
+                name = "X-Brand-Id", 
+                description = "Brand identifier for multi-tenant support", 
+                required = true, 
+                in = ParameterIn.HEADER,
+                example = "brand1"
+            ),
+            @Parameter(
+                name = "Authorization", 
+                description = "JWT Bearer token", 
+                required = true, 
+                in = ParameterIn.HEADER,
+                example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            )
+        }
+    )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Profile updated successfully"),
-        @ApiResponse(responseCode = "400", description = "Invalid input"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "400", description = "Invalid input or missing X-Brand-Id header"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing JWT token"),
         @ApiResponse(responseCode = "404", description = "User not found")
     })
     public ResponseEntity<?> updateProfile(

@@ -194,4 +194,93 @@ public class IdGeneratorController {
             ));
         }
     }
+    
+    @PostMapping("/user-id/generate")
+    @Operation(summary = "Generate DOMBR user ID", 
+               description = "Generate a unique user ID with DOMBR prefix and 6-digit sequential number")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "User ID generated successfully"),
+        @ApiResponse(responseCode = "500", description = "Failed to generate user ID")
+    })
+    public ResponseEntity<?> generateDombrUserId() {
+        try {
+            String userId = idGeneratorService.generateDombrUserId();
+            return ResponseEntity.ok(Map.of(
+                "userId", userId,
+                "success", true,
+                "message", "User ID generated successfully"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "message", "Failed to generate user ID: " + e.getMessage()
+            ));
+        }
+    }
+    
+    @GetMapping("/user-id/preview")
+    @Operation(summary = "Preview next DOMBR user ID", 
+               description = "Preview what the next DOMBR user ID would be without generating it")
+    public ResponseEntity<?> previewNextDombrUserId() {
+        try {
+            String previewId = idGeneratorService.previewNextDombrUserId();
+            Long currentNumber = idGeneratorService.getCurrentNumber("DOMBR");
+            return ResponseEntity.ok(Map.of(
+                "nextUserId", previewId,
+                "currentNumber", currentNumber,
+                "success", true
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "message", "Failed to preview user ID: " + e.getMessage()
+            ));
+        }
+    }
+    
+    @GetMapping("/user-id/simple")
+    @Operation(summary = "Generate a simple DOMBR user ID", 
+               description = "Generate a DOMBR user ID using a simple method that doesn't rely on database sequences")
+    public ResponseEntity<?> generateSimpleDombrUserId() {
+        try {
+            String userId = idGeneratorService.generateSimpleDombrUserId();
+            return ResponseEntity.ok(Map.of(
+                "userId", userId,
+                "method", "simple",
+                "success", true
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "message", "Failed to generate simple user ID: " + e.getMessage()
+            ));
+        }
+    }
+    
+    @PostMapping("/user-id/init-sequence")
+    @Operation(summary = "Initialize DOMBR sequence", 
+               description = "Initialize the DOMBR sequence and function for sequential ID generation")
+    public ResponseEntity<?> initDombrSequence() {
+        try {
+            // Execute the SQL to create the sequence and function
+            idGeneratorService.initializeDombrSequence();
+            
+            // Test the sequence by generating a few IDs
+            String id1 = idGeneratorService.generateDombrUserId();
+            String id2 = idGeneratorService.generateDombrUserId();
+            String id3 = idGeneratorService.generateDombrUserId();
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "DOMBR sequence initialized successfully",
+                "testIds", List.of(id1, id2, id3)
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "message", "Failed to initialize DOMBR sequence: " + e.getMessage(),
+                "error", e.toString()
+            ));
+        }
+    }
 }

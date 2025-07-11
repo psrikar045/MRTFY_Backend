@@ -49,16 +49,28 @@ public class JwtUtil {
         return extractExpiration(token).before(new Date());
     }
 
+    // Token expiration times in milliseconds
+    private static final long ACCESS_TOKEN_EXPIRATION = 1000 * 60 * 60 * 10; // 10 hours
+    private static final long REFRESH_TOKEN_EXPIRATION = 1000 * 60 * 60 * 24 * 7; // 7 days
+    
     public String generateToken(UserDetails userDetails, String userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
-        return createToken(claims, userDetails.getUsername(), 1000 * 60 * 60 * 10); // 10 hours
+        return createToken(claims, userDetails.getUsername(), ACCESS_TOKEN_EXPIRATION);
     }
 
     public String generateRefreshToken(UserDetails userDetails, String userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
-        return createToken(claims, userDetails.getUsername(), 1000 * 60 * 60 * 24 * 7); // 7 days
+        return createToken(claims, userDetails.getUsername(), REFRESH_TOKEN_EXPIRATION);
+    }
+    
+    public long getAccessTokenExpirationTimeInSeconds() {
+        return ACCESS_TOKEN_EXPIRATION / 1000;
+    }
+    
+    public long getRefreshTokenExpirationTimeInSeconds() {
+        return REFRESH_TOKEN_EXPIRATION / 1000;
     }
 
     private String createToken(Map<String, Object> claims, String subject, long expirationTime) {

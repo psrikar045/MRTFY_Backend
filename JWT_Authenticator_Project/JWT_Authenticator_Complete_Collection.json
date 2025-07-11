@@ -1,0 +1,1142 @@
+{
+  "info": {
+    "_postman_id": "jwt-authenticator-complete-collection",
+    "name": "JWT Authenticator API - Complete Collection",
+    "description": "Complete API collection for JWT Authenticator microservice with authentication, 2FA, password reset, request forwarding, ID generation, and more.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{tenantId}}",
+                "description": "Required tenant ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"password\": \"{{testPassword}}\",\n    \"email\": \"{{testEmail}}\",\n    \"firstName\": \"{{testFirstName}}\",\n    \"lastName\": \"{{testLastName}}\",\n    \"phoneNumber\": \"{{testPhoneNumber}}\",\n    \"location\": \"{{testLocation}}\",\n    \"brandId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register a new user account with complete profile information"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 201\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has required fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData).to.have.property('brandId');",
+                  "    pm.expect(jsonData).to.have.property('username');",
+                  "    pm.expect(jsonData).to.have.property('email');",
+                  "});",
+                  "",
+                  "pm.test(\"Registration successful\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email?token={{verificationToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}",
+                  "description": "Email verification token received via email"
+                }
+              ]
+            },
+            "description": "Verify user email address using token from email"
+          }
+        },
+        {
+          "name": "Login User (Legacy)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('accessToken', response.token);",
+                  "    pm.environment.set('refreshToken', response.refreshToken);",
+                  "    if (response.brandId) {",
+                  "        pm.environment.set('brandId', response.brandId);",
+                  "    }",
+                  "    console.log('Tokens saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"password\": \"{{testPassword}}\",\n    \"brandId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login user and get JWT tokens (Legacy endpoint)"
+          }
+        },
+        {
+          "name": "Login with Username",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('accessToken', response.token);",
+                  "    pm.environment.set('refreshToken', response.refreshToken);",
+                  "    if (response.brandId) {",
+                  "        pm.environment.set('brandId', response.brandId);",
+                  "    }",
+                  "    console.log('Tokens saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/username",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login",
+                "username"
+              ]
+            },
+            "description": "Login with username and password (no brandId required)"
+          }
+        },
+        {
+          "name": "Login with Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('accessToken', response.token);",
+                  "    pm.environment.set('refreshToken', response.refreshToken);",
+                  "    if (response.brandId) {",
+                  "        pm.environment.set('brandId', response.brandId);",
+                  "    }",
+                  "    console.log('Tokens saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testEmail}}\",\n    \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login",
+                "email"
+              ]
+            },
+            "description": "Login with email and password (no brandId required)"
+          }
+        },
+        {
+          "name": "Generate Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"password\": \"{{testPassword}}\",\n    \"brandId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "token"
+              ]
+            },
+            "description": "Generate authentication token"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('accessToken', response.token);",
+                  "    pm.environment.set('refreshToken', response.refreshToken);",
+                  "    if (response.brandId) {",
+                  "        pm.environment.set('brandId', response.brandId);",
+                  "    }",
+                  "    console.log('New tokens saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{refreshToken}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Refresh JWT token using refresh token"
+          }
+        },
+        {
+          "name": "Google Sign-In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google"
+              ]
+            },
+            "description": "Authenticate using Google ID token"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"{{testFirstName}}\",\n  \"lastName\": \"{{testLastName}}\",\n  \"phoneNumber\": \"{{testPhoneNumber}}\",\n  \"location\": \"{{testLocation}}\",\n  \"email\": \"updated.{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "profile"
+              ]
+            },
+            "description": "Update user profile information with enhanced fields"
+          }
+        }
+      ],
+      "description": "User authentication endpoints"
+    },
+    {
+      "name": "Password Management",
+      "item": [
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Request password reset email"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{resetToken}}\",\n    \"newPassword\": \"NewSecurePassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Reset password using token from email"
+          }
+        }
+      ],
+      "description": "Password management endpoints"
+    },
+    {
+      "name": "Two-Factor Authentication",
+      "item": [
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/setup?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "setup"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}"
+                }
+              ]
+            },
+            "description": "Setup two-factor authentication for user"
+          }
+        },
+        {
+          "name": "Get 2FA QR Code",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/qr-code?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "qr-code"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}"
+                }
+              ]
+            },
+            "description": "Get QR code for 2FA setup"
+          }
+        },
+        {
+          "name": "Verify 2FA Code",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"code\": \"{{tfaCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "verify"
+              ]
+            },
+            "description": "Verify 2FA code"
+          }
+        },
+        {
+          "name": "Enable 2FA",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/enable?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "enable"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}"
+                }
+              ]
+            },
+            "description": "Enable 2FA for user"
+          }
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/disable?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "disable"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}"
+                }
+              ]
+            },
+            "description": "Disable 2FA for user"
+          }
+        },
+        {
+          "name": "Get Current 2FA Code",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/current-code?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "current-code"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}"
+                }
+              ]
+            },
+            "description": "Get current 2FA code for testing"
+          }
+        }
+      ],
+      "description": "Two-factor authentication endpoints"
+    },
+    {
+      "name": "Forward API",
+      "item": [
+        {
+          "name": "Forward Request - With X-Brand-Id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}",
+                "description": "Required brand ID for multi-tenant support"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"{{testForwardUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forward"
+              ]
+            },
+            "description": "Forward request to external API WITH the required X-Brand-Id header"
+          }
+        },
+        {
+          "name": "Forward Request - Missing X-Brand-Id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"{{testForwardUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forward"
+              ]
+            },
+            "description": "Forward request to external API WITHOUT the required X-Brand-Id header. This will result in a 400 Bad Request error."
+          }
+        },
+        {
+          "name": "Forward Request - Rate Limiting Test",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}",
+                "description": "Required brand ID for multi-tenant support"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"{{testForwardUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forward"
+              ]
+            },
+            "description": "Test rate limiting by sending multiple requests in quick succession"
+          }
+        },
+        {
+          "name": "Forward Request - Timeout Test",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}",
+                "description": "Required brand ID for multi-tenant support"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"{{timeoutTestUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forward"
+              ]
+            },
+            "description": "Test timeout handling by forwarding to a slow-responding URL"
+          }
+        }
+      ],
+      "description": "Forward API endpoints with X-Brand-Id header requirement"
+    },
+    {
+      "name": "Protected Resources",
+      "item": [
+        {
+          "name": "Get Protected Resource",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}",
+                "description": "Required brand ID for multi-tenant support"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/protected",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "protected"
+              ]
+            },
+            "description": "Access protected resource with JWT token and X-Brand-Id header"
+          }
+        },
+        {
+          "name": "Get Protected Resource - Missing X-Brand-Id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/protected",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "protected"
+              ]
+            },
+            "description": "Access protected resource WITHOUT X-Brand-Id header (will fail)"
+          }
+        },
+        {
+          "name": "Get Admin Resource",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}",
+                "description": "Required brand ID for multi-tenant support"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin"
+              ]
+            },
+            "description": "Access admin-only resource (requires ADMIN role)"
+          }
+        }
+      ],
+      "description": "Protected resources requiring authentication"
+    },
+    {
+      "name": "ID Generator",
+      "item": [
+        {
+          "name": "Generate Next ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/id-generator/next",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "id-generator",
+                "next"
+              ]
+            },
+            "description": "Generate next ID with default prefix"
+          }
+        },
+        {
+          "name": "Generate Next ID with Custom Prefix",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/id-generator/next?prefix={{customPrefix}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "id-generator",
+                "next"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "{{customPrefix}}"
+                }
+              ]
+            },
+            "description": "Generate next ID with custom prefix"
+          }
+        },
+        {
+          "name": "Get Current Sequence",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/id-generator/sequence?prefix={{customPrefix}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "id-generator",
+                "sequence"
+              ],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "{{customPrefix}}"
+                }
+              ]
+            },
+            "description": "Get current sequence for prefix"
+          }
+        },
+        {
+          "name": "Reset Sequence",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Brand-Id",
+                "value": "{{brandId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"prefix\": \"{{customPrefix}}\",\n    \"startNumber\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/id-generator/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "id-generator",
+                "reset"
+              ]
+            },
+            "description": "Reset sequence for prefix"
+          }
+        }
+      ],
+      "description": "ID Generator endpoints"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ]
+}

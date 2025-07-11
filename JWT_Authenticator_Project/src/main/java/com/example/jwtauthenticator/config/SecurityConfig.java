@@ -68,6 +68,7 @@ public class SecurityConfig {
                                    "/auth/verify-email", "/auth/tfa/**", "/auth/google", "/test/**", 
                                    "/auth/check-email", "/auth/forgot-password-code", 
                                    "/auth/verify-reset-code", "/auth/set-new-password",
+                                   "/api/id-generator/user-id/init-sequence",
                                    "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", 
                                    "/actuator/health").permitAll()
                     .anyRequest().authenticated()
