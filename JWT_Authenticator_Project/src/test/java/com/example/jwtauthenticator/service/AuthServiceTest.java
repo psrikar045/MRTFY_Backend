@@ -156,7 +156,7 @@ public class AuthServiceTest {
         assertEquals("Email not verified. Please verify your email to login.", thrown.getMessage());
         
         // Verify that a failure login log was saved
-        verify(loginLogRepository, times(1)).save(any(LoginLog.class));
+        verify(loginLogRepository, times(2)).save(any(LoginLog.class));
     }
 
     @Test

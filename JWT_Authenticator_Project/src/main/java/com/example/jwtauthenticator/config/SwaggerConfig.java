@@ -46,7 +46,10 @@ public class SwaggerConfig {
                                 .description(appConfig.isLocalDevelopment() ? "Development Server" : "Production Server"),
                         new Server()
                                 .url("http://localhost:8080")
-                                .description("Local Development Fallback")))
+                                .description("Local Development Fallback"),
+                        new Server()
+                                .url("http://202.65.155.125:8080/myapp")
+                                .description("Tomcat Deployment")))
                 .addSecurityItem(new SecurityRequirement()
                         .addList("Bearer Authentication")
                         .addList("X-Brand-Id"))

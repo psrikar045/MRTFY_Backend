@@ -17,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,16 +46,23 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         final String authorizationHeader = request.getHeader("Authorization");
         final String brandId = request.getHeader("X-Brand-Id"); // Extract brandId
         final String requestPath = request.getRequestURI();
-
+        final String contextPath = request.getContextPath();
+        
+        // Log request details for debugging
+        System.out.println("Request URI: " + requestPath);
+        System.out.println("Context Path: " + contextPath);
+        System.out.println("Servlet Path: " + request.getServletPath());
+        
         // Skip authentication for public endpoints
         if (isPublicEndpoint(requestPath)) {
+            System.out.println("Public endpoint detected, skipping authentication");
             chain.doFilter(request, response);
             return;
         }
 
         // For protected endpoints, check if Authorization header is present and valid
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            sendErrorResponse(response, HttpStatus.UNAUTHORIZED, 
+            sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
                 "Authorization header is missing or invalid", 
                 "Please include a valid Bearer token in the Authorization header");
             return;
@@ -67,7 +75,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             jwt = authorizationHeader.substring(7);
             username = jwtUtil.extractUsername(jwt);
         } catch (Exception e) {
-            sendErrorResponse(response, HttpStatus.UNAUTHORIZED, 
+            sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
                 "Invalid JWT token", 
                 "The provided JWT token is malformed or invalid");
             return;
@@ -76,7 +84,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             // Validate X-Brand-Id header is present for protected endpoints
             if (brandId == null || brandId.isEmpty()) {
-                sendErrorResponse(response, HttpStatus.BAD_REQUEST, 
+                sendErrorResponse(request, response, HttpStatus.BAD_REQUEST, 
                     "X-Brand-Id header is missing", 
                     "Please include X-Brand-Id header in your request. This header is required for multi-tenant support.");
                 return;
@@ -91,18 +99,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 } else {
-                    sendErrorResponse(response, HttpStatus.UNAUTHORIZED, 
+                    sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
                         "Invalid or expired JWT token", 
                         "The provided JWT token is invalid or has expired. Please obtain a new token.");
                     return;
                 }
             } catch (UsernameNotFoundException e) {
-                sendErrorResponse(response, HttpStatus.UNAUTHORIZED, 
+                sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
                     "User not found or not associated with this brand", 
                     "The user in the JWT token is not found or not associated with the provided brand ID.");
                 return;
             } catch (Exception e) {
-                sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, 
+                sendErrorResponse(request, response, HttpStatus.INTERNAL_SERVER_ERROR, 
                     "Authentication error", 
                     "An error occurred during authentication: " + e.getMessage());
                 return;
@@ -116,44 +124,94 @@ public class JwtRequestFilter extends OncePerRequestFilter {
      * Determines if the requested path is a public endpoint that doesn't require authentication
      */
     private boolean isPublicEndpoint(String path) {
-        return path.startsWith("/auth/login") || 
-               path.startsWith("/auth/token") || 
-               path.startsWith("/auth/login/email") ||
-               path.startsWith("/auth/login/username") ||
-               path.startsWith("/auth/register") || 
-               path.startsWith("/auth/forgot-password") || 
-               path.startsWith("/auth/reset-password") ||
-               path.startsWith("/auth/refresh") ||
-               path.startsWith("/auth/forward") ||
-               path.startsWith("/auth/forgot-password-code") || 
-               path.startsWith("/auth/verify-reset-code") ||
-               path.startsWith("/auth/check-email") ||
-               path.startsWith("/auth/set-new-password") ||
-               path.startsWith("/auth/google") ||
-               path.startsWith("/auth/verify-email") ||
-               path.startsWith("/auth/tfa/") ||
-               path.startsWith("/test/") ||
-               path.startsWith("/swagger-ui") ||
-               path.startsWith("/v3/api-docs") ||
-               path.startsWith("/api/id-generator/user-id/init-sequence") ||
-               path.startsWith("/actuator/health") ||
-               path.equals("/hello");
+        // Create a list of public endpoint patterns
+        String[] publicEndpoints = {
+            "/auth/login", 
+            "/auth/token", 
+            "/auth/login/email",
+            "/auth/login/username",
+            "/auth/register", 
+            "/auth/forgot-password", 
+            "/auth/reset-password",
+            "/auth/refresh",
+            "/auth/forward",
+            "/auth/forgot-password-code", 
+            "/auth/verify-reset-code",
+            "/auth/check-email",
+            "/auth/set-new-password",
+            "/auth/google",
+            "/auth/verify-email",
+            "/auth/tfa",
+            "/test",
+            "/swagger-ui",
+            "/swagger-ui.html",
+            "/v3/api-docs",
+            "/api/id-generator/user-id/init-sequence",
+            "/actuator/health",
+            "/hello"
+        };
+        
+        // Log the incoming path for debugging
+        System.out.println("Checking path: " + path);
+        
+        // Check if the path ends with any of the public endpoints
+        for (String endpoint : publicEndpoints) {
+            // Check if the path ends with the endpoint or if it's a subpath
+            if (path.endsWith(endpoint) || 
+                path.contains(endpoint + "/") || 
+                path.matches(".*" + endpoint + "(\\.html)?$")) {
+                System.out.println("Matched public endpoint: " + endpoint);
+                return true;
+            }
+        }
+        
+        // Additional checks for specific patterns
+        if (path.contains("/swagger-ui/") || 
+            path.contains("/v3/api-docs/") || 
+            path.contains("/webjars/") ||
+            path.endsWith("/") || 
+            path.endsWith("/myapp")) {
+            System.out.println("Matched special pattern");
+            return true;
+        }
+        
+        System.out.println("Not a public endpoint");
+        return false;
     }
     
     /**
      * Sends a standardized error response with detailed information
      */
-    private void sendErrorResponse(HttpServletResponse response, HttpStatus status, String error, String message) 
+    private void sendErrorResponse(HttpServletRequest request, HttpServletResponse response, HttpStatus status, String error, String message) 
             throws IOException {
         response.setStatus(status.value());
         response.setContentType("application/json");
+        
+        // Get the actual request path from the request attributes
+        String requestPath = (String) request.getAttribute("javax.servlet.forward.request_uri");
+        if (requestPath == null) {
+            requestPath = request.getRequestURI();
+        }
+        
+        // Log detailed information for debugging
+        System.out.println("Sending error response for path: " + requestPath);
+        System.out.println("Error: " + error);
+        System.out.println("Message: " + message);
         
         Map<String, Object> errorDetails = new HashMap<>();
         errorDetails.put("timestamp", Instant.now().toString());
         errorDetails.put("status", status.value());
         errorDetails.put("error", error);
         errorDetails.put("message", message);
-        errorDetails.put("path", "/api/protected"); // This would ideally be dynamic
+        errorDetails.put("path", requestPath);
+        
+        // Add request details for debugging
+        Map<String, String> requestDetails = new HashMap<>();
+        requestDetails.put("uri", request.getRequestURI());
+        requestDetails.put("contextPath", request.getContextPath());
+        requestDetails.put("servletPath", request.getServletPath());
+        requestDetails.put("method", request.getMethod());
+        errorDetails.put("requestDetails", requestDetails);
         
         // Add information about required headers for authentication
         if (status == HttpStatus.BAD_REQUEST || status == HttpStatus.UNAUTHORIZED) {
@@ -162,6 +220,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             requiredHeaders.put("X-Brand-Id", "{brand_id}");
             errorDetails.put("requiredHeaders", requiredHeaders);
         }
+        
+        // Add information about public endpoints
+        errorDetails.put("publicEndpoints", Arrays.asList(
+            "/auth/login", "/auth/token", "/auth/register", 
+            "/auth/forgot-password", "/swagger-ui", "/v3/api-docs"
+        ));
         
         response.getWriter().write(objectMapper.writeValueAsString(errorDetails));
     }
