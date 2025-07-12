@@ -22,10 +22,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Filter that intercepts all requests to validate JWT tokens and brand ID headers.
- * This filter ensures that:
- * 1. Valid JWT tokens are present in the Authorization header
- * 2. X-Brand-Id header is included for multi-tenant support
+ * Filter that intercepts all requests to validate JWT tokens.
+ * This filter ensures that valid JWT tokens are present in the Authorization header
+ * for protected endpoints.
  */
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
@@ -44,7 +43,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         final String authorizationHeader = request.getHeader("Authorization");
-        final String brandId = request.getHeader("X-Brand-Id"); // Extract brandId
+        // No longer requiring X-Brand-Id header
+        final String brandId = "default"; // Use a default brand ID
         final String requestPath = request.getRequestURI();
         final String contextPath = request.getContextPath();
         
@@ -82,13 +82,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // Validate X-Brand-Id header is present for protected endpoints
-            if (brandId == null || brandId.isEmpty()) {
-                sendErrorResponse(request, response, HttpStatus.BAD_REQUEST, 
-                    "X-Brand-Id header is missing", 
-                    "Please include X-Brand-Id header in your request. This header is required for multi-tenant support.");
-                return;
-            }
+            // No longer validating X-Brand-Id header
 
             try {
                 UserDetails userDetails = this.jwtUserDetailsService.loadUserByUsernameAndBrandId(username, brandId);
@@ -217,7 +211,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (status == HttpStatus.BAD_REQUEST || status == HttpStatus.UNAUTHORIZED) {
             Map<String, String> requiredHeaders = new HashMap<>();
             requiredHeaders.put("Authorization", "Bearer {jwt_token}");
-            requiredHeaders.put("X-Brand-Id", "{brand_id}");
+            // X-Brand-Id is no longer required
             errorDetails.put("requiredHeaders", requiredHeaders);
         }
         

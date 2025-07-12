@@ -117,7 +117,7 @@ public class AuthService {
                 .phoneNumber(request.phoneNumber())
                 .location(request.location())
                 .role(Role.USER) // Default role
-                .brandId(null)
+                .brandId("default")
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .emailVerified(false)

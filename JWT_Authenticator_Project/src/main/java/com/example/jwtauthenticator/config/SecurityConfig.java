@@ -112,10 +112,11 @@ public class SecurityConfig {
             appConfig.getFrontendBaseUrl(), // Centralized frontend URL
             "http://localhost:3000", // Development fallback
             "http://localhost:3001", // Development fallback
+            "http://localhost:4200", // Angular application
             "https://accounts.google.com" // Google Sign-In
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Brand-Id", "X-Forward-URL"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Forward-URL"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

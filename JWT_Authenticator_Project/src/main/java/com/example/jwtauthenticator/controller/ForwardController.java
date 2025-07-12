@@ -56,13 +56,6 @@ public class ForwardController {
                 required = true, 
                 in = ParameterIn.HEADER,
                 example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-            ),
-            @Parameter(
-                name = "X-Brand-Id", 
-                description = "Brand identifier for multi-tenant support", 
-                required = true, 
-                in = ParameterIn.HEADER,
-                example = "brand1"
             )
         }
     )
