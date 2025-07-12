@@ -96,7 +96,7 @@ public class AuthService {
                 brandId = idGeneratorService.generateNextId(); // Uses default prefix from application.properties
             } catch (Exception e) {
                 log.error("Error generating brand ID, using default", e);
-                brandId = "MRTFY" + String.format("%04d", System.currentTimeMillis() % 10000);
+                brandId = "MRTFY" + String.format("%06d", System.currentTimeMillis() % 10000);
             }
         }
         
@@ -411,9 +411,15 @@ public class AuthService {
             dombrId = "DOMBR" + String.format("%06d", System.currentTimeMillis() % 1000000);
             log.warn("Using timestamp-based ID as last resort for Google user: {}", dombrId);
         }
-        
+        String brandId;
+         try {
+                brandId = idGeneratorService.generateNextId(); // Uses default prefix from application.properties
+            } catch (Exception e) {
+                log.error("Error generating brand ID, using default", e);
+                brandId = "MRTFY" + String.format("%06d", System.currentTimeMillis() % 10000);
+            }
         return User.builder()
-                .id(dombrId) // Set the DOMBR ID as primary key
+                .id(brandId) // Set the DOMBR ID as primary key
                 .username(username)
                 .email(googleUserInfo.getEmail())
                 .firstName(firstName)
@@ -545,80 +551,136 @@ public class AuthService {
     // Enhanced Forgot Password with Verification Code
     @Transactional
     public String sendPasswordResetCode(ForgotPasswordRequest request) {
-        // Check if user exists
-        if (!userRepository.existsByEmailAndBrandId(request.email(), request.brandId())) {
-            throw new RuntimeException("No account found with this email address");
+        try {
+            // Validate user ID format (should match MRTFY000001 pattern)
+            if (!request.userId().matches("MRTFY\\d{6}")) {
+                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+            }
+            
+            // Find user by userId and email to confirm they match
+            User user = userRepository.findById(request.userId())
+                    .orElseThrow(() -> new RuntimeException("User ID not found"));
+            
+            // Validate that the email matches the user's email
+            if (!user.getEmail().equals(request.email())) {
+                throw new RuntimeException("User ID and email do not match");
+            }
+    
+            // Clean up any existing codes for this user
+            passwordResetCodeRepository.deleteByEmailAndUserId(request.email(), request.userId());
+    
+            // Generate 6-digit verification code
+            String code = generateVerificationCode();
+    
+            // Save the code
+            PasswordResetCode resetCode = PasswordResetCode.builder()
+                    .email(request.email())
+                    .userId(request.userId())
+                    .code(code)
+                    .build();
+    
+            passwordResetCodeRepository.save(resetCode);
+    
+            // Send email with verification code
+            String emailSubject = "Password Reset Verification Code";
+            String emailBody = "Your verification code is: " + code + ". It will expire in 10 minutes. Use this code to reset your password.";
+            
+            try {
+                emailService.sendEmail(request.email(), emailSubject, emailBody);
+                log.info("Password reset code sent to: {}", request.email());
+            } catch (Exception e) {
+                log.error("Failed to send password reset email: {}", e.getMessage());
+                throw new RuntimeException("Failed to send verification code email");
+            }
+    
+            return "Verification code sent successfully.";
+        } catch (Exception e) {
+            log.error("Error in sendPasswordResetCode: {}", e.getMessage());
+            throw e;
         }
-
-        // Clean up any existing codes for this email
-        passwordResetCodeRepository.deleteByEmailAndBrandId(request.email(), request.brandId());
-
-        // Generate 6-digit verification code
-        String code = generateVerificationCode();
-
-        // Save the code
-        PasswordResetCode resetCode = PasswordResetCode.builder()
-                .email(request.email())
-                .brandId(request.brandId())
-                .code(code)
-                .build();
-
-        passwordResetCodeRepository.save(resetCode);
-
-        // TODO: Send email with verification code
-        // For now, we'll just return the code (in production, this should be sent via email)
-        System.out.println("Password reset code for " + request.email() + ": " + code);
-
-        return "Verification code sent to your email address";
     }
 
     // Verify Reset Code Method - Only verify, don't mark as used yet
     public String verifyResetCode(VerifyCodeRequest request) {
-        Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
-                .findByEmailAndBrandIdAndCodeAndUsedFalse(request.email(), request.brandId(), request.code());
-
-        if (resetCodeOpt.isEmpty()) {
-            throw new RuntimeException("Invalid verification code");
+        try {
+            // Validate user ID format
+            if (!request.userId().matches("MRTFY\\d{6}")) {
+                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+            }
+            
+            Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
+                    .findByEmailAndUserIdAndCodeAndUsedFalse(request.email(), request.userId(), request.code());
+    
+            if (resetCodeOpt.isEmpty()) {
+                throw new RuntimeException("Invalid verification code");
+            }
+    
+            PasswordResetCode resetCode = resetCodeOpt.get();
+            if (resetCode.isExpired()) {
+                // Delete expired code
+                passwordResetCodeRepository.delete(resetCode);
+                throw new RuntimeException("Verification code has expired. Please request a new code.");
+            }
+    
+            // Don't mark as used here - just verify it's valid
+            return "Code verified successfully. Proceed to set a new password.";
+        } catch (Exception e) {
+            log.error("Error in verifyResetCode: {}", e.getMessage());
+            throw e;
         }
-
-        PasswordResetCode resetCode = resetCodeOpt.get();
-        if (resetCode.isExpired()) {
-            throw new RuntimeException("Verification code has expired");
-        }
-
-        // Don't mark as used here - just verify it's valid
-        return "Verification code is valid. You can now proceed to reset your password.";
     }
 
     // Set New Password Method - Only works after code verification
     @Transactional
     public String setNewPassword(SetNewPasswordRequest request) {
-        // Verify the code again before allowing password reset
-        Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
-                .findByEmailAndBrandIdAndCodeAndUsedFalse(request.email(), request.brandId(), request.code());
-
-        if (resetCodeOpt.isEmpty()) {
-            throw new RuntimeException("Invalid verification code or code already used");
+        try {
+            // Validate user ID format
+            if (!request.userId().matches("MRTFY\\d{6}")) {
+                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+            }
+            
+            // Verify the code again before allowing password reset
+            Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
+                    .findByEmailAndUserIdAndCodeAndUsedFalse(request.email(), request.userId(), request.code());
+    
+            if (resetCodeOpt.isEmpty()) {
+                throw new RuntimeException("Invalid verification code or code already used");
+            }
+    
+            PasswordResetCode resetCode = resetCodeOpt.get();
+            if (resetCode.isExpired()) {
+                // Delete expired code
+                passwordResetCodeRepository.delete(resetCode);
+                throw new RuntimeException("Verification code has expired. Please request a new one.");
+            }
+    
+            // Find and update user password
+            User user = userRepository.findById(request.userId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+                    
+            // Verify email matches
+            if (!user.getEmail().equals(request.email())) {
+                throw new RuntimeException("User ID and email do not match");
+            }
+    
+            // Validate password complexity
+            if (request.newPassword().length() < 8) {
+                throw new RuntimeException("Password must be at least 8 characters long");
+            }
+    
+            user.setPassword(passwordEncoder.encode(request.newPassword()));
+            user.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(user);
+    
+            // Mark the code as used - now it can't be used again
+            resetCode.setUsed(true);
+            passwordResetCodeRepository.save(resetCode);
+    
+            return "Password has been reset successfully";
+        } catch (Exception e) {
+            log.error("Error in setNewPassword: {}", e.getMessage());
+            throw e;
         }
-
-        PasswordResetCode resetCode = resetCodeOpt.get();
-        if (resetCode.isExpired()) {
-            throw new RuntimeException("Verification code has expired. Please request a new one.");
-        }
-
-        // Find and update user password
-        User user = userRepository.findByEmailAndBrandId(request.email(), request.brandId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        user.setPassword(passwordEncoder.encode(request.newPassword()));
-        user.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(user);
-
-        // Mark the code as used - now it can't be used again
-        resetCode.setUsed(true);
-        passwordResetCodeRepository.save(resetCode);
-
-        return "Password has been reset successfully";
     }
 
     // Helper method to generate 6-digit verification code

@@ -262,9 +262,22 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@Valid @RequestBody PasswordResetRequest request) {
-        passwordResetService.createPasswordResetToken(request.email());
-        return ResponseEntity.ok("Password reset link sent to your email.");
+    @Operation(summary = "Initiate password reset with 6-digit verification code", 
+               description = "Initiates the password reset process by generating and sending a 6-digit verification code")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Verification code sent successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input or user ID and email do not match")
+    })
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        try {
+            String result = authService.sendPasswordResetCode(request);
+            return ResponseEntity.ok(Map.of("message", result));
+        } catch (Exception e) {
+            // Return a generic response to avoid revealing whether the user exists
+            return ResponseEntity.ok(Map.of(
+                "message", "If the user ID and email are registered, a verification code will be sent."
+            ));
+        }
     }
 
     @PostMapping("/reset-password")
@@ -452,15 +465,17 @@ public class AuthController {
     @Operation(summary = "Send password reset verification code", description = "Send a verification code to the user's email for password reset")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Verification code sent successfully"),
-        @ApiResponse(responseCode = "400", description = "Invalid input"),
-        @ApiResponse(responseCode = "404", description = "Email not found")
+        @ApiResponse(responseCode = "400", description = "Invalid input")
     })
     public ResponseEntity<?> sendPasswordResetCode(@Valid @RequestBody ForgotPasswordRequest request) {
         try {
             String result = authService.sendPasswordResetCode(request);
-            return ResponseEntity.ok(result);
+            return ResponseEntity.ok(Map.of("message", result));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            // Return a generic response to avoid revealing whether the user exists
+            return ResponseEntity.ok(Map.of(
+                "message", "If the user ID and email are registered, a verification code will be sent."
+            ));
         }
     }
 
@@ -478,6 +493,8 @@ public class AuthController {
             return ResponseEntity.ok(Map.of(
                 "message", result,
                 "verified", true,
+                "userId", request.userId(),
+                "email", request.email(),
                 "nextStep", "You can now call /auth/set-new-password with the same code to reset your password"
             ));
         } catch (Exception e) {

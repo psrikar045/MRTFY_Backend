@@ -13,13 +13,15 @@ import java.util.Optional;
 @Repository
 public interface PasswordResetCodeRepository extends JpaRepository<PasswordResetCode, Long> {
     
-    Optional<PasswordResetCode> findByEmailAndBrandIdAndCodeAndUsedFalse(String email, String brandId, String code);
+    Optional<PasswordResetCode> findByEmailAndUserIdAndCodeAndUsedFalse(String email, String userId, String code);
     
     @Modifying
-    @Query("DELETE FROM PasswordResetCode p WHERE p.email = :email AND p.brandId = :brandId")
-    void deleteByEmailAndBrandId(@Param("email") String email, @Param("brandId") String brandId);
+    @Query("DELETE FROM PasswordResetCode p WHERE p.email = :email AND p.userId = :userId")
+    void deleteByEmailAndUserId(@Param("email") String email, @Param("userId") String userId);
     
     @Modifying
     @Query("DELETE FROM PasswordResetCode p WHERE p.expiresAt < :now")
     void deleteExpiredCodes(@Param("now") LocalDateTime now);
+    
+    boolean existsByEmailAndUserId(String email, String userId);
 }
