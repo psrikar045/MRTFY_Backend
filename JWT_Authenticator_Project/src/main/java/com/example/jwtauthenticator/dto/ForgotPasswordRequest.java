@@ -6,9 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 
 @Schema(description = "Forgot password request")
 public record ForgotPasswordRequest(
-    @Schema(description = "User ID", example = "MRTFY000001")
-    @NotBlank(message = "User ID is required")
-    String userId,
+//    @Schema(description = "User ID", example = "MRTFY000001")
+//    @NotBlank(message = "User ID is required")
+//    String userId,
     
     @Schema(description = "Email address to send verification code", example = "user@example.com")
     @Email(message = "Email should be valid")

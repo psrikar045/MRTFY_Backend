@@ -6,10 +6,12 @@ import com.example.jwtauthenticator.model.EmailLoginRequest;
 import com.example.jwtauthenticator.model.RegisterRequest;
 import com.example.jwtauthenticator.model.UsernameLoginRequest;
 import com.example.jwtauthenticator.service.AuthService;
+import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.PasswordResetService;
+import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.service.TfaService;
+import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.dto.*;
-import java.util.Map;
 import com.example.jwtauthenticator.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,22 +26,22 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.Map;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import jakarta.validation.Valid;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
 @Tag(name = "Authentication", description = "Authentication and user management endpoints")
+@lombok.extern.slf4j.Slf4j
 public class AuthController {
 
     @Autowired
@@ -53,6 +55,15 @@ public class AuthController {
 
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private ForwardService forwardService;
+    
+    @Autowired
+    private RateLimiterService rateLimiterService;
+    
+    @Autowired
+    private UserRepository userRepository;
 
     @Operation(summary = "Register a new user", 
                description = "Register a new user account with email verification")
@@ -287,34 +298,169 @@ public class AuthController {
     }
 
     @PostMapping("/tfa/setup")
-    public ResponseEntity<?> setupTfa(@RequestParam String username) {
+    @Operation(
+        summary = "Setup Two-Factor Authentication", 
+        description = "Generate a new 2FA secret for a user"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "2FA secret generated successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid username")
+    })
+    public ResponseEntity<?> setupTfa(
+            @Parameter(description = "Username to set up 2FA for", required = true)
+            @RequestParam String username) {
         String secret = tfaService.generateNewSecret(username);
         return ResponseEntity.ok("New 2FA secret generated: " + secret);
     }
 
     @PostMapping("/tfa/verify")
-    public ResponseEntity<?> verifyTfa(@Valid @RequestBody TfaRequest request) {
+    @Operation(
+        summary = "Verify Two-Factor Authentication code", 
+        description = "Verify a 2FA code provided by the user"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "2FA code verified successfully"),
+        @ApiResponse(responseCode = "401", description = "Invalid 2FA code")
+    })
+    public ResponseEntity<?> verifyTfa(
+            @Parameter(description = "2FA verification request", required = true)
+            @Valid @RequestBody TfaRequest request) {
         if (tfaService.verifyCode(request.username(), Integer.parseInt(request.code()))) {
             return ResponseEntity.ok("2FA code verified successfully.");
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid 2FA code.");
         }
     }
+    
+    @Operation(
+        summary = "Public forward request", 
+        description = "Forwards a request to an external API without authentication requirement"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Request forwarded successfully"),
+        @ApiResponse(responseCode = "400", description = "Bad Request - Invalid URL"),
+        @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded"),
+        @ApiResponse(responseCode = "500", description = "Internal Server Error"),
+        @ApiResponse(responseCode = "504", description = "Gateway Timeout - External API timed out")
+    })
+    @PostMapping("/public-forward")
+    public ResponseEntity<?> publicForward(
+            @Parameter(description = "Forward request details", required = true)
+            @Valid @RequestBody PublicForwardRequest request,
+            HttpServletRequest httpRequest) {
+        
+        long start = System.currentTimeMillis();
+        String clientIp = getClientIp(httpRequest);
+        
+        // Apply rate limiting based on client IP with the public rate limiter
+        io.github.bucket4j.ConsumptionProbe probe = rateLimiterService.consumePublic(clientIp);
+        if (!probe.isConsumed()) {
+            long waitSeconds = java.util.concurrent.TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Retry-After", String.valueOf(waitSeconds));
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .headers(headers)
+                    .body(buildErrorMap("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS));
+        }
+        
+        try {
+            java.util.concurrent.CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
+            ResponseEntity<String> extResponse = future.get();
+            
+            // Log the request (without user ID since this is unauthenticated)
+            log.info("ip={} | url={} | status={} | duration={}ms", 
+                    clientIp, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);
+            
+            if (extResponse.getStatusCode().is2xxSuccessful()) {
+                return ResponseEntity.ok(extResponse.getBody());
+            }
+            
+            return ResponseEntity.status(extResponse.getStatusCode())
+                    .body(buildErrorMap("External API error: " + extResponse.getBody(), extResponse.getStatusCode()));
+        } catch (Exception e) {
+            log.error("ip={} | url={} | error={}", clientIp, request.url(), e.getMessage());
+            
+            if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
+                return buildError("External API timed out after " + forwardService.getForwardConfig().getTimeoutSeconds() + " seconds", 
+                        HttpStatus.GATEWAY_TIMEOUT);
+            }
+            
+            return buildError("External API error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+    
+    private ResponseEntity<Map<String, Object>> buildError(String message, HttpStatus status) {
+        return ResponseEntity.status(status).body(buildErrorMap(message, status));
+    }
+    
+    private Map<String, Object> buildErrorMap(String message, HttpStatusCode status) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", message);
+        body.put("status", status.value());
+        body.put("timestamp", java.time.Instant.now().toString());
+        return body;
+    }
+    
+    private Map<String, Object> buildErrorMap(String message, HttpStatus status) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", message);
+        body.put("status", status.value());
+        body.put("timestamp", java.time.Instant.now().toString());
+        return body;
+    }
 
     @PostMapping("/tfa/enable")
-    public ResponseEntity<?> enableTfa(@RequestParam String username) {
+    @Operation(
+        summary = "Enable Two-Factor Authentication", 
+        description = "Enable 2FA for a user"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "2FA enabled successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid username or 2FA setup not completed")
+    })
+    public ResponseEntity<?> enableTfa(
+            @Parameter(description = "Username to enable 2FA for", required = true)
+            @RequestParam String username) {
         tfaService.enableTfa(username);
         return ResponseEntity.ok("2FA enabled for user: " + username);
     }
 
     @PostMapping("/tfa/disable")
-    public ResponseEntity<?> disableTfa(@RequestParam String username) {
+    @Operation(
+        summary = "Disable Two-Factor Authentication", 
+        description = "Disable 2FA for a user"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "2FA disabled successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid username")
+    })
+    public ResponseEntity<?> disableTfa(
+            @Parameter(description = "Username to disable 2FA for", required = true)
+            @RequestParam String username) {
         tfaService.disableTfa(username);
         return ResponseEntity.ok("2FA disabled for user: " + username);
     }
 
     @GetMapping("/tfa/qr-code")
-    public ResponseEntity<byte[]> getTfaQrCode(@RequestParam String username) {
+    @Operation(
+        summary = "Get 2FA QR Code", 
+        description = "Generate a QR code for 2FA setup"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "QR code generated successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid username or 2FA not set up")
+    })
+    public ResponseEntity<byte[]> getTfaQrCode(
+            @Parameter(description = "Username to get QR code for", required = true)
+            @RequestParam String username) {
         try {
             byte[] qrCode = tfaService.generateQRCode(username);
             return ResponseEntity.ok()
@@ -326,7 +472,17 @@ public class AuthController {
     }
 
     @GetMapping("/tfa/current-code")
-    public ResponseEntity<?> getCurrentTotpCode(@RequestParam String username) {
+    @Operation(
+        summary = "Get current TOTP code", 
+        description = "Get the current time-based one-time password (TOTP) for a user (for testing purposes)"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Current TOTP code retrieved successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid username or 2FA not set up")
+    })
+    public ResponseEntity<?> getCurrentTotpCode(
+            @Parameter(description = "Username to get TOTP code for", required = true)
+            @RequestParam String username) {
         try {
             int currentCode = tfaService.getCurrentTotpCode(username);
             Map<String, String> response = new HashMap<>();
@@ -456,7 +612,153 @@ public class AuthController {
                 "message", exists ? "Email address is already registered" : "Email address is available"
             ));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", e.getMessage(),
+                "timestamp", java.time.Instant.now().toString()
+            ));
+        }
+    }
+    
+    // Check Username Existence Endpoint
+    @PostMapping("/check-username")
+    @Operation(
+        summary = "Check if username exists", 
+        description = "Check if a username is already registered with a specific brand. This endpoint requires a brand ID."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Username check completed successfully",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400", 
+            description = "Invalid input",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        )
+    })
+    public ResponseEntity<?> checkUsername(@Valid @RequestBody CheckUsernameRequest request) {
+        try {
+            boolean exists = authService.checkUsernameExists(request);
+            return ResponseEntity.ok(Map.of(
+                "exists", exists,
+                "message", exists ? "Username is already taken" : "Username is available"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", e.getMessage(),
+                "timestamp", java.time.Instant.now().toString()
+            ));
+        }
+    }
+    
+    // Simple Check Username Existence Endpoint (without brand ID)
+    @PostMapping("/check-username/simple")
+    @Operation(
+        summary = "Check if username exists (simple version)", 
+        description = "Check if a username is already registered across all brands. This endpoint does not require a brand ID."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Username check completed successfully",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400", 
+            description = "Invalid input",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        )
+    })
+    public ResponseEntity<?> checkUsernameSimple(@Valid @RequestBody SimpleCheckUsernameRequest request) {
+        try {
+            boolean exists = authService.checkUsernameExists(request);
+            return ResponseEntity.ok(Map.of(
+                "exists", exists,
+                "message", exists ? "Username is already taken" : "Username is available"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", e.getMessage(),
+                "timestamp", java.time.Instant.now().toString()
+            ));
+        }
+    }
+    
+    // GET Endpoint for Username Check (most RESTful approach)
+    @GetMapping("/username-exists")
+    @Operation(
+        summary = "Check if username exists (GET method)", 
+        description = "Check if a username is already registered across all brands using a GET request. This is the most RESTful approach for checking username existence."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Username check completed successfully",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400", 
+            description = "Invalid input",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        )
+    })
+    public ResponseEntity<?> usernameExists(
+            @Parameter(description = "Username to check", required = true, example = "johndoe")
+            @RequestParam String username) {
+        try {
+            if (username == null || username.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Username is required",
+                    "timestamp", java.time.Instant.now().toString()
+                ));
+            }
+            
+            // Validate username format
+            if (username.length() < 3 || username.length() > 50) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Username must be between 3 and 50 characters",
+                    "timestamp", java.time.Instant.now().toString()
+                ));
+            }
+            
+            if (!username.matches("^[a-zA-Z0-9._-]+$")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Username can only contain letters, numbers, dots, underscores, and hyphens",
+                    "timestamp", java.time.Instant.now().toString()
+                ));
+            }
+            
+            boolean exists = authService.checkUsernameExists(username);
+            return ResponseEntity.ok(Map.of(
+                "username", username,
+                "exists", exists,
+                "message", exists ? "Username is already taken" : "Username is available",
+                "timestamp", java.time.Instant.now().toString()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", e.getMessage(),
+                "timestamp", java.time.Instant.now().toString()
+            ));
         }
     }
 
@@ -489,12 +791,13 @@ public class AuthController {
     })
     public ResponseEntity<?> verifyResetCode(@Valid @RequestBody VerifyCodeRequest request) {
         try {
-            String result = authService.verifyResetCode(request);
+            Map result = authService.verifyResetCode(request);
             return ResponseEntity.ok(Map.of(
-                "message", result,
+                "message", result.get("message"),
                 "verified", true,
-                "userId", request.userId(),
+                "userId", result.get("userId"),
                 "email", request.email(),
+                "code", request.code(),
                 "nextStep", "You can now call /auth/set-new-password with the same code to reset your password"
             ));
         } catch (Exception e) {

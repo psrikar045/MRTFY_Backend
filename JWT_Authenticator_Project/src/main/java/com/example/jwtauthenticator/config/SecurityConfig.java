@@ -79,6 +79,10 @@ public class SecurityConfig {
                         "/auth/forgot-password-code", 
                         "/auth/verify-reset-code", 
                         "/auth/set-new-password",
+                        "/auth/public-forward",
+                        "/auth/check-username",
+                        "/auth/check-username/simple",
+                        "/auth/username-exists",
                         
                         // 2FA endpoints
                         "/auth/tfa/**", 
@@ -86,6 +90,10 @@ public class SecurityConfig {
                         // Other public endpoints
                         "/test/**", 
                         "/api/id-generator/user-id/init-sequence",
+                        
+                        // Brand asset serving (public access for images/logos)
+                        "/api/brands/assets/**",
+                        "/api/brands/images/**",
                         
                         // Documentation
                         "/v3/api-docs/**", 
@@ -116,7 +124,7 @@ public class SecurityConfig {
             "https://accounts.google.com" // Google Sign-In
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Forward-URL"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Forward-URL", "X-Forwarded-For"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

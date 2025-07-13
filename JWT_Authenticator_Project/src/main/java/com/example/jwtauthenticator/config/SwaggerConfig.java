@@ -31,10 +31,11 @@ public class SwaggerConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("JWT Authenticator API")
-                        .version("1.0.0")
-                        .description("A comprehensive JWT-based authentication system with multi-tenant support, " +
-                                "email verification, two-factor authentication, and audit logging.")
+                        .title("JWT Authenticator & Brand Data API")
+                        .version("2.0.0")
+                        .description("A comprehensive JWT-based authentication system with brand data extraction, " +
+                                "multi-tenant support, email verification, two-factor authentication, and audit logging. " +
+                                "Now includes automated brand data extraction and storage from websites.")
                         .contact(new Contact()
                                 .name("JWT Authenticator Team")
                                 .email("support@jwtauthenticator.com")

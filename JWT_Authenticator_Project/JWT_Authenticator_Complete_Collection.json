@@ -4,7 +4,7 @@
     "name": "JWT Authenticator API - Complete Collection",
     "description": "Complete API collection for JWT Authenticator microservice with authentication, 2FA, password reset, request forwarding, ID generation, and more.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "item": [
     {
@@ -379,6 +379,256 @@
       "description": "User authentication endpoints"
     },
     {
+      "name": "Two-Factor Authentication",
+      "item": [
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/setup?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "setup"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to set up 2FA for"
+                }
+              ]
+            },
+            "description": "Generate a new 2FA secret for a user"
+          }
+        },
+        {
+          "name": "Verify 2FA Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"code\": \"{{tfaCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "verify"
+              ]
+            },
+            "description": "Verify a 2FA code provided by the user"
+          }
+        },
+        {
+          "name": "Enable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/enable?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "enable"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to enable 2FA for"
+                }
+              ]
+            },
+            "description": "Enable 2FA for a user"
+          }
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/disable?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "disable"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to disable 2FA for"
+                }
+              ]
+            },
+            "description": "Disable 2FA for a user"
+          }
+        },
+        {
+          "name": "Get 2FA QR Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/qr-code?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "qr-code"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to get QR code for"
+                }
+              ]
+            },
+            "description": "Generate a QR code for 2FA setup"
+          }
+        },
+        {
+          "name": "Get Current TOTP Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/tfa/current-code?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "tfa",
+                "current-code"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to get TOTP code for"
+                }
+              ]
+            },
+            "description": "Get the current time-based one-time password (TOTP) for a user (for testing purposes)"
+          }
+        }
+      ],
+      "description": "Two-Factor Authentication endpoints"
+    },
+    {
+      "name": "Username Validation",
+      "item": [
+        {
+          "name": "Check Username (with Brand ID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\",\n    \"brandId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/check-username",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "check-username"
+              ]
+            },
+            "description": "Check if a username is already registered with a specific brand"
+          }
+        },
+        {
+          "name": "Check Username (Simple)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{testUsername}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/check-username/simple",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "check-username",
+                "simple"
+              ]
+            },
+            "description": "Check if a username is already registered across all brands"
+          }
+        },
+        {
+          "name": "Check Username (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/username-exists?username={{testUsername}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "username-exists"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{testUsername}}",
+                  "description": "Username to check"
+                }
+              ]
+            },
+            "description": "Check if a username is already registered using a GET request"
+          }
+        }
+      ],
+      "description": "Username validation endpoints"
+    },
+    {
       "name": "Password Management",
       "item": [
         {
@@ -689,6 +939,33 @@
     {
       "name": "Forward API",
       "item": [
+        {
+          "name": "Public Forward Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"{{testForwardUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/public-forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "public-forward"
+              ]
+            },
+            "description": "Forward a request to an external API without authentication requirement"
+          }
+        },
         {
           "name": "Forward Request - With X-Brand-Id",
           "request": {

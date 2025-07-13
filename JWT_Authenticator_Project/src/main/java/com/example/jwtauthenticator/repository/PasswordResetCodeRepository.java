@@ -14,7 +14,8 @@ import java.util.Optional;
 public interface PasswordResetCodeRepository extends JpaRepository<PasswordResetCode, Long> {
     
     Optional<PasswordResetCode> findByEmailAndUserIdAndCodeAndUsedFalse(String email, String userId, String code);
-    
+    Optional<PasswordResetCode> findByEmailAndCodeAndUsedFalse(String email, String code);
+
     @Modifying
     @Query("DELETE FROM PasswordResetCode p WHERE p.email = :email AND p.userId = :userId")
     void deleteByEmailAndUserId(@Param("email") String email, @Param("userId") String userId);

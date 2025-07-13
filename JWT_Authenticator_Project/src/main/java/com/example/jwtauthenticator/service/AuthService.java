@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.transaction.Transactional;
@@ -547,19 +548,34 @@ public class AuthService {
     public boolean checkEmailExists(CheckEmailRequest request) {
         return userRepository.existsByEmailAndBrandId(request.email(), request.brandId());
     }
+    
+    // Check Username Existence Method
+    public boolean checkUsernameExists(CheckUsernameRequest request) {
+        return userRepository.existsByUsernameAndBrandId(request.username(), request.brandId());
+    }
+    
+    // Simple Check Username Existence Method (without brand ID)
+    public boolean checkUsernameExists(SimpleCheckUsernameRequest request) {
+        return userRepository.existsByUsername(request.username());
+    }
+    
+    // Check Username Existence by username string
+    public boolean checkUsernameExists(String username) {
+        return userRepository.existsByUsername(username);
+    }
 
     // Enhanced Forgot Password with Verification Code
     @Transactional
     public String sendPasswordResetCode(ForgotPasswordRequest request) {
         try {
             // Validate user ID format (should match MRTFY000001 pattern)
-            if (!request.userId().matches("MRTFY\\d{6}")) {
-                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
-            }
+//            if (!request.userId().matches("MRTFY\\d{6}")) {
+//                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+//            }
             
             // Find user by userId and email to confirm they match
-            User user = userRepository.findById(request.userId())
-                    .orElseThrow(() -> new RuntimeException("User ID not found"));
+            User user = userRepository.findByEmail(request.email())
+                    .orElseThrow(() -> new RuntimeException("email not found"));
             
             // Validate that the email matches the user's email
             if (!user.getEmail().equals(request.email())) {
@@ -567,7 +583,7 @@ public class AuthService {
             }
     
             // Clean up any existing codes for this user
-            passwordResetCodeRepository.deleteByEmailAndUserId(request.email(), request.userId());
+            passwordResetCodeRepository.deleteByEmailAndUserId(request.email(), user.getId());
     
             // Generate 6-digit verification code
             String code = generateVerificationCode();
@@ -575,7 +591,7 @@ public class AuthService {
             // Save the code
             PasswordResetCode resetCode = PasswordResetCode.builder()
                     .email(request.email())
-                    .userId(request.userId())
+                    .userId(user.getId())
                     .code(code)
                     .build();
     
@@ -601,15 +617,15 @@ public class AuthService {
     }
 
     // Verify Reset Code Method - Only verify, don't mark as used yet
-    public String verifyResetCode(VerifyCodeRequest request) {
+    public Map<String, Object> verifyResetCode(VerifyCodeRequest request) {
         try {
-            // Validate user ID format
-            if (!request.userId().matches("MRTFY\\d{6}")) {
-                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
-            }
+//            // Validate user ID format
+//            if (!request.userId().matches("MRTFY\\d{6}")) {
+//                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+//            }
             
             Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
-                    .findByEmailAndUserIdAndCodeAndUsedFalse(request.email(), request.userId(), request.code());
+                    .findByEmailAndCodeAndUsedFalse(request.email(), request.code());
     
             if (resetCodeOpt.isEmpty()) {
                 throw new RuntimeException("Invalid verification code");
@@ -623,7 +639,14 @@ public class AuthService {
             }
     
             // Don't mark as used here - just verify it's valid
-            return "Code verified successfully. Proceed to set a new password.";
+            return Map.of(
+                    "message", "Code verified successfully. Proceed to set a new password.",
+                    "verified", true,
+                    "userId", resetCode.getUserId(),
+                    "email", request.email(),
+                    "nextStep", "You can now call /auth/set-new-password with the same code to reset your password"
+                );
+//            return "Code verified successfully. Proceed to set a new password.";
         } catch (Exception e) {
             log.error("Error in verifyResetCode: {}", e.getMessage());
             throw e;
