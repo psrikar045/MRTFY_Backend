@@ -122,7 +122,8 @@ public class SecurityConfig {
             "http://localhost:3000", // Development fallback
             "http://localhost:3001", // Development fallback
             "http://localhost:4200", // Angular application
-            "https://accounts.google.com" // Google Sign-In
+            "https://accounts.google.com", // Google Sign-In
+            "http://202.65.155.117"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Forward-URL", "X-Forwarded-For"));

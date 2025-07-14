@@ -21,16 +21,6 @@
     <div class="container">
         <div class="header">
             <div style="max-width: 350px; margin: 0 auto; position: relative; height: 100px;">
-                <!-- Icon representation using CSS -->
-                <div style="position: absolute; left: 20px; top: 20px; width: 60px; height: 40px;">
-                    <div style="position: absolute; left: 8px; top: 22px; width: 8px; height: 8px; background: #E8651A; border-radius: 2px;"></div>
-                   <div style="position: absolute; left: 16px; top: 14px; width: 8px; height: 8px; background: #D1501C; border-radius: 2px;"></div>
-                    <div style="position: absolute; left: 24px; top: 6px; width: 8px; height: 8px; background: #BA3B1E; border-radius: 2px;"></div>
-                    <div style="position: absolute; left: 32px; top: 0px; width: 8px; height: 8px; background: #A32620; border-radius: 2px;"></div>
-                    <div style="position: absolute; left: 40px; top: 6px; width: 8px; height: 8px; background: #BA3B1E; border-radius: 2px;"></div>
-                    <div style="position: absolute; left: 48px; top: 14px; width: 8px; height: 8px; background: #D1501C; border-radius: 2px;"></div>
-                    <div style="position: absolute; left: 56px; top: 22px; width: 8px; height: 8px; background: #E8651A; border-radius: 2px;"></div>
-                </div>
                 <!-- Text -->
                 <div style="position: absolute; left: 90px; top: 15px;">
                     <div style="font-family: Arial, sans-serif; font-size: 32px; font-weight: bold; color: #B3F5FF; margin: 0; line-height: 1;">MARKETIFY</div>
