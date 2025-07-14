@@ -50,6 +50,7 @@ public class ForwardService {
                 .thenApply(response -> {
                     if (response.getStatusCode().is2xxSuccessful()) {
                         forwardCache.put(url, response.getBody());
+                        //need to add my logic 
                         
                         // Trigger brand data extraction for successful responses
                         if (brandExtractionEnabled) {
