@@ -38,8 +38,8 @@ public class PasswordResetService {
         passwordResetTokenRepository.save(myToken);
 
         // Send email
-        String resetLink = appConfig.getApiUrl("/auth/reset-password?token=" + token);
-        emailService.sendEmail(user.getEmail(), "Password Reset Request", "To reset your password, click the link: " + resetLink);
+        String baseUrl = appConfig.getApiUrl("");
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getUsername(), token, baseUrl);
     }
 
     public void createPasswordResetToken(String email) {
@@ -60,6 +60,14 @@ public class PasswordResetService {
         User user = resetToken.getUser();
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+
+        // Send password reset confirmation email
+        try {
+            emailService.sendPasswordResetConfirmation(user.getEmail(), user.getUsername());
+        } catch (Exception e) {
+            // Log the error but don't prevent password reset
+            System.err.println("Failed to send password reset confirmation email: " + e.getMessage());
+        }
 
         passwordResetTokenRepository.delete(resetToken);
     }

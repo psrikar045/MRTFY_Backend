@@ -1,0 +1,167 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script>[#-- Registration Confirmation Email Template --]
+[#macro registrationConfirmation user confirmationUrl]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Marketify</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { background-color: #007bff; padding: 20px; text-align: center; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+        .header img { max-width: 150px; height: auto; }
+        .content { padding: 20px; text-align: center; }
+        .content h1 { font-size: 24px; color: #007bff; }
+        .content p { font-size: 16px; line-height: 1.5; }
+        .cta-button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-size: 16px; margin: 20px 0; }
+        .cta-button:hover { background-color: #0056b3; }
+        .footer { background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #666; }
+        .footer a { color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://marketify.com/assets/logo.png" alt="Marketify Logo">
+        </div>
+        <div class="content">
+            <h1>Welcome to Marketify, ${user.firstName}!</h1>
+            <p>Thank you for registering with Marketify. To activate your account, please click the button below to confirm your email address.</p>
+            <a href="${confirmationUrl}" class="cta-button">Activate Your Account</a>
+            <p>If the button doesn’t work, copy and paste this link into your browser:</p>
+            <p><a href="${confirmationUrl}">${confirmationUrl}</a></p>
+            <p>This link will expire in 24 hours. If you didn’t register, please ignore this email.</p>
+        </div>
+        <div class="footer">
+            <p>Marketify Inc. | 1234 Market Street, San Francisco, CA 94103</p>
+            <p><a href="https://marketify.com">marketify.com</a> | <a href="mailto:support@marketify.com">support@marketify.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
+[/#macro]
+
+[#-- Forgot Password Verification Code Email Template --]
+[#macro forgotPasswordVerification user verificationCode]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Your Marketify Password</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { background-color: #007bff; padding: 20px; text-align: center; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+        .header img { max-width: 150px; height: auto; }
+        .content { padding: 20px; text-align: center; }
+        .content h1 { font-size: 24px; color: #007bff; }
+        .content p { font-size: 16px; line-height: 1.5; }
+        .code { font-size: 24px; font-weight: bold; color: #007bff; letter-spacing: 2px; padding: 10px; background-color: #f4f4f4; display: inline-block; margin: 10px 0; }
+        .footer { background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #666; }
+        .footer a { color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://marketify.com/assets/logo.png" alt="Marketify Logo">
+        </div>
+        <div class="content">
+            <h1>Reset Your Password</h1>
+            <p>We received a request to reset your Marketify account password. Please use the following verification code to proceed:</p>
+            <div class="code">${verificationCode}</div>
+            <p>Enter this code on the password reset page. It will expire in 15 minutes.</p>
+            <p>If you didn’t request a password reset, please contact us at <a href="mailto:support@marketify.com">support@marketify.com</a>.</p>
+        </div>
+        <div class="footer">
+            <p>Marketify Inc. | 1234 Market Street, San Francisco, CA 94103</p>
+            <p><a href="https://marketify.com">marketify.com</a> | <a href="mailto:support@marketify.com">support@marketify.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
+[/#macro]
+
+[#-- New Password Confirmation Email Template --]
+[#macro newPasswordConfirmation user]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Reset Successful</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { background-color: #007bff; padding: 20px; text-align: center; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+        .header img { max-width: 150px; height: auto; }
+        .content { padding: 20px; text-align: center; }
+        .content h1 { font-size: 24px; color: #007bff; }
+        .content p { font-size: 16px; line-height: 1.5; }
+        .cta-button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-size: 16px; margin: 20px 0; }
+        .cta-button:hover { background-color: #0056b3; }
+        .footer { background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #666; }
+        .footer a { color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://marketify.com/assets/logo.png" alt="Marketify Logo">
+        </div>
+        <div class="content">
+            <h1>Password Reset Successful</h1>
+            <p>Your Marketify account password has been successfully updated, ${user.firstName}.</p>
+            <p>You can now log in with your new password.</p>
+            <a href="https://marketify.com/login" class="cta-button">Log In to Marketify</a>
+            <p>If you didn’t change your password, please contact us immediately at <a href="mailto:support@marketify.com">support@marketify.com</a>.</p>
+        </div>
+        <div class="footer">
+            <p>Marketify Inc. | 1234 Market Street, San Francisco, CA 94103</p>
+            <p><a href="https://marketify.com">marketify.com</a> | <a href="mailto:support@marketify.com">support@marketify.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
+[/#macro]

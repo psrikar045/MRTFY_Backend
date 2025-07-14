@@ -33,12 +33,17 @@ public class FileStorageService {
     private final BrandRepository brandRepository;
     private final BrandAssetRepository brandAssetRepository;
     private final BrandImageRepository brandImageRepository;
+    private final SftpFileStorageService sftpFileStorageService;
+    private final HttpFileStorageService httpFileStorageService;
     
     @Value("${app.file-storage.type:local}")
-    private String storageType; // local, s3, gcs
+    private String storageType; // local, http, sftp, s3, gcs
     
-    @Value("${app.file-storage.local.base-path:./brand-assets}")
+    @Value("${app.file-storage.local.base-path:./Brand_Assets}")
     private String localBasePath;
+    
+    @Value("${app.file-storage.server.base-url:http://202.65.155.125:8080/images/Brand_Assets}")
+    private String serverBaseUrl;
     
     @Value("${app.file-storage.download.timeout-seconds:30}")
     private int downloadTimeoutSeconds;
@@ -90,6 +95,21 @@ public class FileStorageService {
             return;
         }
         
+        // Check if the asset still exists and has a valid brand
+        // Only check existence if the asset has an ID (i.e., it was previously saved)
+        if (asset.getId() != null) {
+            if (!brandAssetRepository.existsById(asset.getId())) {
+                log.warn("Asset no longer exists in database, skipping download: {}", asset.getOriginalUrl());
+                return;
+            }
+        }
+        
+        // Check if brand still exists
+        if (asset.getBrand() == null || !brandRepository.existsById(asset.getBrand().getId())) {
+            log.warn("Asset's brand no longer exists, skipping download: {}", asset.getOriginalUrl());
+            return;
+        }
+        
         try {
             asset.setDownloadStatus(BrandAsset.DownloadStatus.DOWNLOADING);
             asset.setDownloadAttempts(asset.getDownloadAttempts() + 1);
@@ -108,7 +128,9 @@ public class FileStorageService {
                 asset.setDownloadedAt(LocalDateTime.now());
                 asset.setDownloadError(null);
                 
-                log.info("Successfully downloaded asset: {} -> {}", asset.getOriginalUrl(), result.getStoredPath());
+                String serverUrl = getFileUrl(result.getStoredPath());
+                log.info("Successfully downloaded asset: {} -> {} (Server URL: {})", 
+                        asset.getOriginalUrl(), result.getStoredPath(), serverUrl);
             } else {
                 asset.setDownloadStatus(BrandAsset.DownloadStatus.FAILED);
                 asset.setDownloadError(result.getErrorMessage());
@@ -135,6 +157,21 @@ public class FileStorageService {
             return;
         }
         
+        // Check if the image still exists and has a valid brand
+        // Only check existence if the image has an ID (i.e., it was previously saved)
+        if (image.getId() != null) {
+            if (!brandImageRepository.existsById(image.getId())) {
+                log.warn("Image no longer exists in database, skipping download: {}", image.getSourceUrl());
+                return;
+            }
+        }
+        
+        // Check if brand still exists
+        if (image.getBrand() == null || !brandRepository.existsById(image.getBrand().getId())) {
+            log.warn("Image's brand no longer exists, skipping download: {}", image.getSourceUrl());
+            return;
+        }
+        
         try {
             image.setDownloadStatus(BrandImage.DownloadStatus.DOWNLOADING);
             image.setDownloadAttempts(image.getDownloadAttempts() + 1);
@@ -153,7 +190,9 @@ public class FileStorageService {
                 image.setDownloadedAt(LocalDateTime.now());
                 image.setDownloadError(null);
                 
-                log.info("Successfully downloaded image: {} -> {}", image.getSourceUrl(), result.getStoredPath());
+                String serverUrl = getFileUrl(result.getStoredPath());
+                log.info("Successfully downloaded image: {} -> {} (Server URL: {})", 
+                        image.getSourceUrl(), result.getStoredPath(), serverUrl);
             } else {
                 image.setDownloadStatus(BrandImage.DownloadStatus.FAILED);
                 image.setDownloadError(result.getErrorMessage());
@@ -211,6 +250,10 @@ public class FileStorageService {
         switch (storageType.toLowerCase()) {
             case "local":
                 return storeFileLocally(content, targetPath);
+            case "http":
+                return storeFileViaHttp(content, targetPath);
+            case "sftp":
+                return storeFileViaSftp(content, targetPath);
             case "s3":
                 return storeFileInS3(content, targetPath);
             case "gcs":
@@ -229,10 +272,60 @@ public class FileStorageService {
         // Create directories if they don't exist
         Files.createDirectories(fullPath.getParent());
         
-        // Write file
+        // Check if file already exists
+        boolean fileExists = Files.exists(fullPath);
+        if (fileExists) {
+            log.info("File already exists, overwriting: {}", fullPath);
+        }
+        
+        // Write file (this will overwrite if it exists)
         Files.write(fullPath, content);
         
-        return fullPath.toString();
+        log.info("Successfully stored file locally: {} (Size: {} bytes)", fullPath, content.length);
+        
+        // Return relative path for database storage
+        return targetPath;
+    }
+    
+    /**
+     * Store file on remote server via HTTP
+     */
+    private String storeFileViaHttp(byte[] content, String targetPath) throws IOException {
+        try {
+            // Extract filename from path
+            String fileName = targetPath.substring(targetPath.lastIndexOf('/') + 1);
+            
+            // Upload to remote server via HTTP
+            String storedPath = httpFileStorageService.uploadFile(content, fileName, targetPath);
+            
+            log.info("Successfully stored file via HTTP: {} (Size: {} bytes)", targetPath, content.length);
+            
+            // Return relative path for database storage
+            return storedPath;
+        } catch (Exception e) {
+            log.error("Failed to store file via HTTP, falling back to local storage: {}", e.getMessage());
+            // Fall back to local storage
+            return storeFileLocally(content, targetPath);
+        }
+    }
+    
+    /**
+     * Store file on remote server via SFTP
+     */
+    private String storeFileViaSftp(byte[] content, String targetPath) throws IOException {
+        try {
+            // Upload to remote server via SFTP
+            String storedPath = sftpFileStorageService.uploadFile(content, targetPath);
+            
+            log.info("Successfully stored file via SFTP: {} (Size: {} bytes)", targetPath, content.length);
+            
+            // Return relative path for database storage
+            return storedPath;
+        } catch (Exception e) {
+            log.error("Failed to store file via SFTP, falling back to local storage: {}", e.getMessage());
+            // Fall back to local storage
+            return storeFileLocally(content, targetPath);
+        }
     }
     
     /**
@@ -296,14 +389,44 @@ public class FileStorageService {
      * Get file as Resource for serving
      */
     public Resource getFileAsResource(String filePath) throws IOException {
-        Path path = Paths.get(filePath);
-        Resource resource = new UrlResource(path.toUri());
+        // Convert relative path to full local path for file access
+        Path fullPath = Paths.get(localBasePath, filePath);
+        Resource resource = new UrlResource(fullPath.toUri());
         
         if (resource.exists() && resource.isReadable()) {
             return resource;
         } else {
-            throw new IOException("File not found or not readable: " + filePath);
+            throw new IOException("File not found or not readable: " + fullPath);
         }
+    }
+    
+    /**
+     * Construct full server URL from relative path
+     */
+    public String getFileUrl(String relativePath) {
+        if (relativePath == null || relativePath.isEmpty()) {
+            return null;
+        }
+        
+        // Ensure proper URL formatting
+        String baseUrl = serverBaseUrl.endsWith("/") ? serverBaseUrl : serverBaseUrl + "/";
+        String path = relativePath.startsWith("/") ? relativePath.substring(1) : relativePath;
+        
+        return baseUrl + path;
+    }
+    
+    /**
+     * Get full server URL for a brand asset
+     */
+    public String getAssetUrl(BrandAsset asset) {
+        return getFileUrl(asset.getStoredPath());
+    }
+    
+    /**
+     * Get full server URL for a brand image
+     */
+    public String getImageUrl(BrandImage image) {
+        return getFileUrl(image.getStoredPath());
     }
     
     /**

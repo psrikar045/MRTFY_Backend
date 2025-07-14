@@ -7,13 +7,33 @@ package com.example.jwtauthenticator.model;
 public class ApiRequestExamples {
 
     /**
-     * Example of a login request with brandId
+     * Example of a login request with brandId (for token endpoint)
      */
     public static final String LOGIN_REQUEST_WITH_BRAND = """
     {
       "username": "john_doe",
       "password": "SecurePassword123!",
       "brandId": "brand1"
+    }
+    """;
+    
+    /**
+     * Example of a login request with username
+     */
+    public static final String LOGIN_REQUEST_USERNAME = """
+    {
+      "username": "john_doe",
+      "password": "SecurePassword123!"
+    }
+    """;
+    
+    /**
+     * Example of a login request with email
+     */
+    public static final String LOGIN_REQUEST_EMAIL = """
+    {
+      "username": "john.doe@example.com",
+      "password": "SecurePassword123!"
     }
     """;
     

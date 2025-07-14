@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 public class BrandDataService {
     
     private final BrandRepository brandRepository;
+    private final FileStorageService fileStorageService;
     
     /**
      * Get brand data by ID
@@ -140,17 +141,29 @@ public class BrandDataService {
     
     private List<BrandDataResponse.AssetInfo> convertAssets(List<BrandAsset> assets) {
         return assets.stream()
-                .map(asset -> BrandDataResponse.AssetInfo.builder()
-                        .id(asset.getId())
-                        .assetType(asset.getAssetType().name())
-                        .originalUrl(asset.getOriginalUrl())
-                        .accessUrl(asset.getAccessUrl())
-                        .fileName(asset.getFileName())
-                        .fileSize(asset.getFileSize())
-                        .mimeType(asset.getMimeType())
-                        .downloadStatus(asset.getDownloadStatus().name())
-                        .downloadedAt(asset.getDownloadedAt())
-                        .build())
+                .map(asset -> {
+                    String accessUrl = null;
+                    if (asset.getDownloadStatus() == BrandAsset.DownloadStatus.COMPLETED && 
+                        asset.getStoredPath() != null) {
+                        // Use server URL for downloaded files
+                        accessUrl = fileStorageService.getAssetUrl(asset);
+                    } else {
+                        // Fallback to original URL for non-downloaded files
+                        accessUrl = asset.getOriginalUrl();
+                    }
+                    
+                    return BrandDataResponse.AssetInfo.builder()
+                            .id(asset.getId())
+                            .assetType(asset.getAssetType().name())
+                            .originalUrl(asset.getOriginalUrl())
+                            .accessUrl(accessUrl)
+                            .fileName(asset.getFileName())
+                            .fileSize(asset.getFileSize())
+                            .mimeType(asset.getMimeType())
+                            .downloadStatus(asset.getDownloadStatus().name())
+                            .downloadedAt(asset.getDownloadedAt())
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
     
@@ -191,17 +204,29 @@ public class BrandDataService {
     
     private List<BrandDataResponse.ImageInfo> convertImages(List<BrandImage> images) {
         return images.stream()
-                .map(image -> BrandDataResponse.ImageInfo.builder()
-                        .id(image.getId())
-                        .sourceUrl(image.getSourceUrl())
-                        .altText(image.getAltText())
-                        .accessUrl(image.getAccessUrl())
-                        .fileName(image.getFileName())
-                        .fileSize(image.getFileSize())
-                        .mimeType(image.getMimeType())
-                        .downloadStatus(image.getDownloadStatus().name())
-                        .downloadedAt(image.getDownloadedAt())
-                        .build())
+                .map(image -> {
+                    String accessUrl = null;
+                    if (image.getDownloadStatus() == BrandImage.DownloadStatus.COMPLETED && 
+                        image.getStoredPath() != null) {
+                        // Use server URL for downloaded files
+                        accessUrl = fileStorageService.getImageUrl(image);
+                    } else {
+                        // Fallback to original URL for non-downloaded files
+                        accessUrl = image.getSourceUrl();
+                    }
+                    
+                    return BrandDataResponse.ImageInfo.builder()
+                            .id(image.getId())
+                            .sourceUrl(image.getSourceUrl())
+                            .altText(image.getAltText())
+                            .accessUrl(accessUrl)
+                            .fileName(image.getFileName())
+                            .fileSize(image.getFileSize())
+                            .mimeType(image.getMimeType())
+                            .downloadStatus(image.getDownloadStatus().name())
+                            .downloadedAt(image.getDownloadedAt())
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
     

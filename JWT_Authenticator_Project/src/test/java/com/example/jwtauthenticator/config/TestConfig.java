@@ -1,6 +1,5 @@
 package com.example.jwtauthenticator.config;
 
-import com.example.jwtauthenticator.service.EmailService;
 import com.example.jwtauthenticator.service.IdGeneratorService;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -15,11 +14,6 @@ import static org.mockito.Mockito.when;
 @Profile("test")
 public class TestConfig {
 
-    @Bean
-    @Primary
-    public EmailService emailService() {
-        return Mockito.mock(EmailService.class);
-    }
     
     @Bean
     @Primary

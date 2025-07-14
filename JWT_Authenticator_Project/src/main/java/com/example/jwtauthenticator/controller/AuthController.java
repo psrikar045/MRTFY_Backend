@@ -3,15 +3,18 @@ package com.example.jwtauthenticator.controller;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
 import com.example.jwtauthenticator.model.EmailLoginRequest;
+import com.example.jwtauthenticator.model.LoginRequest;
 import com.example.jwtauthenticator.model.RegisterRequest;
 import com.example.jwtauthenticator.model.UsernameLoginRequest;
 import com.example.jwtauthenticator.service.AuthService;
+import com.example.jwtauthenticator.service.BrandInfoService;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.PasswordResetService;
 import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.service.TfaService;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.dto.*;
+import com.example.jwtauthenticator.dto.BrandInfoResponse;
 import com.example.jwtauthenticator.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,6 +37,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import io.github.bucket4j.ConsumptionProbe;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -64,6 +68,9 @@ public class AuthController {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private BrandInfoService brandInfoService;
 
     @Operation(summary = "Register a new user", 
                description = "Register a new user account with email verification")
@@ -127,8 +134,8 @@ public class AuthController {
     }
 
     @Operation(
-        summary = "User login (Legacy)", 
-        description = "Legacy login endpoint. Use /login/username or /login/email instead."
+        summary = "User login with username or email", 
+        description = "Login endpoint that accepts either username or email in the username field. The system will automatically detect if the input is an email or username and process accordingly."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -150,21 +157,25 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                description = "Authentication request with username, password and optional brandId",
+                description = "Login request with username or email and password",
                 required = true,
                 content = @Content(
                     mediaType = "application/json",
-                    schema = @Schema(implementation = AuthRequest.class),
+                    schema = @Schema(implementation = LoginRequest.class),
                     examples = {
                         @io.swagger.v3.oas.annotations.media.ExampleObject(
-                            name = "Login with Brand ID",
-                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_REQUEST_WITH_BRAND
+                            name = "Login with Username",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_REQUEST_USERNAME
+                        ),
+                        @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            name = "Login with Email",
+                            value = com.example.jwtauthenticator.model.ApiRequestExamples.LOGIN_REQUEST_EMAIL
                         )
                     }
                 )
             )
-            @Valid @RequestBody AuthRequest authenticationRequest) throws Exception {
-        AuthResponse authResponse = authService.loginUser(authenticationRequest);
+            @Valid @RequestBody LoginRequest loginRequest) throws Exception {
+        AuthResponse authResponse = authService.loginUser(loginRequest.username(), loginRequest.password());
         return ResponseEntity.ok(authResponse);
     }
     
@@ -829,5 +840,189 @@ public class AuthController {
                 "success", false
             ));
         }
+    }
+
+    @GetMapping("/brand-info")
+    @Operation(
+        summary = "Get brand information", 
+        description = "Resolve brand information from a URL, domain name, or company name. This public API intelligently identifies the official website associated with the input and verifies its online existence using Google Custom Search for company name resolution."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Brand information resolved successfully",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = BrandInfoResponse.class),
+                examples = {
+                    @ExampleObject(
+                        name = "Success - Direct URL",
+                        description = "Successful resolution of a direct URL",
+                        value = """
+                        {
+                          "status": "success",
+                          "resolvedUrl": "https://www.example.com/path"
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Success - Domain Name",
+                        description = "Successful resolution of a domain name",
+                        value = """
+                        {
+                          "status": "success",
+                          "resolvedUrl": "https://www.example.com"
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Success - Company Name",
+                        description = "Successful resolution of a company name via search",
+                        value = """
+                        {
+                          "status": "success",
+                          "resolvedUrl": "https://www.apple.com"
+                        }
+                        """
+                    )
+                }
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400", 
+            description = "Invalid input or resolution failed",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = BrandInfoResponse.class),
+                examples = {
+                    @ExampleObject(
+                        name = "Error - Invalid URL Format",
+                        description = "Invalid URL format provided",
+                        value = """
+                        {
+                          "status": "error",
+                          "message": "The provided input is not a valid URL format."
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Error - Domain Not Found",
+                        description = "Domain does not have an associated website",
+                        value = """
+                        {
+                          "status": "error",
+                          "message": "The provided domain name does not have an associated active website."
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Error - Company Not Found",
+                        description = "No official website found for company name",
+                        value = """
+                        {
+                          "status": "error",
+                          "message": "No official website could be found for the provided company name."
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Error - Network Issue",
+                        description = "Network error occurred during resolution",
+                        value = """
+                        {
+                          "status": "error",
+                          "message": "A network error occurred while trying to reach the website."
+                        }
+                        """
+                    )
+                }
+            )
+        ),
+        @ApiResponse(
+            responseCode = "429", 
+            description = "Rate limit exceeded",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        )
+    })
+    public ResponseEntity<?> getBrandInfo(
+            @Parameter(
+                description = "A URL, domain name, or company name to resolve. Examples: 'https://www.google.com', 'microsoft.com', 'Apple', 'Wipro Limited'", 
+                required = true,
+                examples = {
+                    @ExampleObject(name = "URL Example", value = "https://www.google.com"),
+                    @ExampleObject(name = "Domain Example", value = "microsoft.com"),
+                    @ExampleObject(name = "Company Name Example", value = "Apple"),
+                    @ExampleObject(name = "Company Full Name Example", value = "Wipro Limited")
+                }
+            )
+            @RequestParam String query,
+            HttpServletRequest request) {
+        
+        try {
+            // Get client IP address for rate limiting
+            String clientIp = getClientIpAddress(request);
+            
+            // Apply rate limiting for public endpoint
+            ConsumptionProbe probe = rateLimiterService.consumePublic(clientIp);
+            
+            if (!probe.isConsumed()) {
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "error", "Rate limit exceeded. Please try again later.",
+                    "retryAfter", probe.getNanosToWaitForRefill() / 1_000_000_000,
+                    "timestamp", java.time.Instant.now().toString()
+                ));
+            }
+            
+            // Process the brand info request
+            BrandInfoResponse response = brandInfoService.resolveBrandInfo(query);
+            
+            if ("success".equals(response.getStatus())) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+        } catch (Exception e) {
+            log.error("Error processing brand info request for query: {}", query, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                BrandInfoResponse.error("An internal error occurred while processing the request.")
+            );
+        }
+    }
+
+    /**
+     * Get the real client IP address, considering various proxy headers
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String[] headers = {
+            "X-Forwarded-For",
+            "X-Real-IP", 
+            "Proxy-Client-IP",
+            "WL-Proxy-Client-IP",
+            "HTTP_X_FORWARDED_FOR",
+            "HTTP_X_FORWARDED",
+            "HTTP_X_CLUSTER_CLIENT_IP",
+            "HTTP_CLIENT_IP",
+            "HTTP_FORWARDED_FOR",
+            "HTTP_FORWARDED",
+            "HTTP_VIA",
+            "REMOTE_ADDR"
+        };
+        
+        for (String header : headers) {
+            String ip = request.getHeader(header);
+            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                // X-Forwarded-For can contain multiple IPs, take the first one
+                if (ip.contains(",")) {
+                    ip = ip.split(",")[0];
+                }
+                return ip.trim();
+            }
+        }
+        
+        return request.getRemoteAddr();
     }
 }

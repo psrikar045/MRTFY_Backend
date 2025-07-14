@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -46,8 +48,8 @@ public class BrandExtractionService {
                 log.info("Created new brand: {} (ID: {})", brand.getName(), brand.getId());
             }
             
-            // Trigger asynchronous asset downloads
-            fileStorageService.downloadBrandAssetsAsync(brand);
+            // Schedule asynchronous asset downloads after transaction commits
+            scheduleAsyncDownload(brand);
             
             return brand;
             
@@ -167,11 +169,8 @@ public class BrandExtractionService {
         // Clear existing related data and add new data
         // Note: Due to cascade = CascadeType.ALL and orphanRemoval = true, 
         // clearing the collections will delete the old records
-        existingBrand.getAssets().clear();
-        existingBrand.getColors().clear();
-        existingBrand.getFonts().clear();
-        existingBrand.getSocialLinks().clear();
-        existingBrand.getImages().clear();
+        // We need to be careful with assets that might be downloading
+        clearExistingDataSafely(existingBrand);
         
         // Add new related data
         addBrandAssets(existingBrand, response);
@@ -310,6 +309,59 @@ public class BrandExtractionService {
             return parts[parts.length - 1];
         } catch (Exception e) {
             return "unknown_file";
+        }
+    }
+    
+    /**
+     * Safely clear existing brand data, avoiding race conditions with async downloads
+     */
+    private void clearExistingDataSafely(Brand brand) {
+        // For assets and images, we need to be careful about ongoing downloads
+        // Mark downloading assets as failed to stop the download process
+        brand.getAssets().forEach(asset -> {
+            if (asset.getDownloadStatus() == BrandAsset.DownloadStatus.DOWNLOADING ||
+                asset.getDownloadStatus() == BrandAsset.DownloadStatus.PENDING) {
+                asset.setDownloadStatus(BrandAsset.DownloadStatus.FAILED);
+                asset.setDownloadError("Brand data updated - download cancelled");
+                log.info("Cancelled download for asset: {} (Brand update)", asset.getOriginalUrl());
+            }
+        });
+        
+        brand.getImages().forEach(image -> {
+            if (image.getDownloadStatus() == BrandImage.DownloadStatus.DOWNLOADING ||
+                image.getDownloadStatus() == BrandImage.DownloadStatus.PENDING) {
+                image.setDownloadStatus(BrandImage.DownloadStatus.FAILED);
+                image.setDownloadError("Brand data updated - download cancelled");
+                log.info("Cancelled download for image: {} (Brand update)", image.getSourceUrl());
+            }
+        });
+        
+        // Now safely clear all collections
+        brand.getAssets().clear();
+        brand.getColors().clear();
+        brand.getFonts().clear();
+        brand.getSocialLinks().clear();
+        brand.getImages().clear();
+    }
+    
+    /**
+     * Schedule async download after transaction commits to ensure all entities are persisted
+     */
+    private void scheduleAsyncDownload(Brand brand) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    log.info("Transaction committed, starting async download for brand: {} (ID: {})", 
+                            brand.getName(), brand.getId());
+                    fileStorageService.downloadBrandAssetsAsync(brand);
+                }
+            });
+        } else {
+            // No active transaction, start download immediately
+            log.info("No active transaction, starting async download immediately for brand: {} (ID: {})", 
+                    brand.getName(), brand.getId());
+            fileStorageService.downloadBrandAssetsAsync(brand);
         }
     }
 }

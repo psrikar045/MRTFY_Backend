@@ -72,24 +72,16 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse registerUser(RegisterRequest request) {
-//        // Generate the sequential user ID
-//        String dombrId;
-//        try {
-//            // Try to use the database sequence
-//            dombrId = idGeneratorService.generateDombrUserId();
-//            log.info("Generated sequential user ID: {}", dombrId);
-//        } catch (Exception e) {
-//            // If that fails, use the simple method
-//            log.error("Failed to generate ID using sequence: {}", e.getMessage());
-//            dombrId = idGeneratorService.generateSimpleDombrUserId();
-//            log.info("Generated simple sequential user ID: {}", dombrId);
-//        }
-//        
-//        // If we still don't have an ID, use a hardcoded one as last resort
-//        if (dombrId == null) {
-//            dombrId = "DOMBR000001";
-//            log.warn("Using hardcoded ID as last resort: {}", dombrId);
-//        }
+        // First check if username already exists across all brands
+        if (userRepository.existsByUsername(request.username())) {
+            throw new RuntimeException("Username already exists. Please choose a different username.");
+        }
+        
+        // Then check if email already exists across all brands
+        if (userRepository.existsByEmail(request.email())) {
+            throw new RuntimeException("Email already exists. Please use a different email address.");
+        }
+        
         // Auto-generate brandId if not provided
         String brandId = request.brandId();
         if (brandId == null || brandId.trim().isEmpty()) {
@@ -101,6 +93,7 @@ public class AuthService {
             }
         }
         
+        // Additional brand-specific checks (these are redundant now but kept for safety)
         if (userRepository.existsByUsernameAndBrandId(request.username(), brandId)) {
             throw new RuntimeException("Username already exists for this brand");
         }
@@ -111,7 +104,7 @@ public class AuthService {
         User newUser = User.builder()
                 .id(brandId) // Set as primary key
                 .username(request.username())
-                .password(request.password())
+                .password(passwordEncoder.encode(request.password())) // Ensure password is encoded
                 .email(request.email())
                 .firstName(request.firstName())
                 .lastName(request.lastName())
@@ -129,8 +122,8 @@ public class AuthService {
 
         userDetailsService.save(newUser);
 
-        String verificationLink = appConfig.getApiUrl("/auth/verify-email?token=" + verificationToken);
-        emailService.sendEmail(newUser.getEmail(), "Email Verification", "Please click the link to verify your email: " + verificationLink);
+        String baseUrl = appConfig.getApiUrl("");
+        emailService.sendVerificationEmail(newUser.getEmail(), newUser.getUsername(), verificationToken, baseUrl);
 
         return new RegisterResponse(
             "User registered successfully. Please verify your email.",
@@ -181,6 +174,46 @@ public class AuthService {
 
     public AuthResponse loginUser(AuthRequest authenticationRequest) throws Exception {
         return createAuthenticationToken(authenticationRequest);
+    }
+    
+    public AuthResponse loginUser(String usernameOrEmail, String password) throws Exception {
+        log.info("Login attempt with identifier: {}", usernameOrEmail); 
+        try {
+            // Check if the input is an email (contains @ symbol)
+            if (usernameOrEmail.contains("@")) {
+                log.debug("Detected email format, attempting email-based login");
+                // Find user by email
+                User user = userRepository.findByEmail(usernameOrEmail)
+                        .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                
+                log.info("Email found, proceeding with authentication for user: {}", user.getUsername());
+                // Authenticate with the found user's username and brandId
+                return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+            } else {
+                log.debug("Username format detected, attempting username-based login");
+                // Find user by username across all brands
+                User user = userRepository.findByUsername(usernameOrEmail)
+                        .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+                
+                log.info("Username found, proceeding with authentication with brand ID: {}", user.getBrandId());
+                // Authenticate with the found user's brandId
+                return authenticateAndGenerateToken(usernameOrEmail, password, user.getBrandId());
+            }
+        } catch (Exception e) {
+            log.error("Login failed for identifier: {}, reason: {}", usernameOrEmail, e.getMessage());
+            
+            // Create a temporary user object for logging if needed
+            User tempUser = new User();
+            tempUser.setUsername(usernameOrEmail);
+            if (usernameOrEmail.contains("@")) {
+                tempUser.setEmail(usernameOrEmail);
+            }
+            tempUser.setBrandId("unknown");
+            tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
+            
+            logLogin(tempUser, "PASSWORD", "FAILURE", "Login failed: " + e.getMessage());
+            throw e;
+        }
     }
     
     public AuthResponse loginWithUsername(String username, String password) throws Exception {
@@ -598,11 +631,8 @@ public class AuthService {
             passwordResetCodeRepository.save(resetCode);
     
             // Send email with verification code
-            String emailSubject = "Password Reset Verification Code";
-            String emailBody = "Your verification code is: " + code + ". It will expire in 10 minutes. Use this code to reset your password.";
-            
             try {
-                emailService.sendEmail(request.email(), emailSubject, emailBody);
+                emailService.sendPasswordResetCode(request.email(), user.getUsername(), code);
                 log.info("Password reset code sent to: {}", request.email());
             } catch (Exception e) {
                 log.error("Failed to send password reset email: {}", e.getMessage());

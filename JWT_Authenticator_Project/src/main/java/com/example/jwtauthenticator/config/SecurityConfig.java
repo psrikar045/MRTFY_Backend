@@ -83,6 +83,7 @@ public class SecurityConfig {
                         "/auth/check-username",
                         "/auth/check-username/simple",
                         "/auth/username-exists",
+                        "/auth/brand-info",
                         
                         // 2FA endpoints
                         "/auth/tfa/**", 
