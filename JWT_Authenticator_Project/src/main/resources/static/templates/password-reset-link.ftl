@@ -21,27 +21,24 @@
 <body>
     <div class="container">
         <div class="header">
-            <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg" style="max-width: 350px; height: auto; display: block; margin: 0 auto;">
-              <rect width="700" height="200" fill="#0C0C30"/>
-              <g transform="translate(40,40)" fill="url(#grad3)">
-                <rect x="0" y="40" width="8" height="8" rx="2"/>
-                <rect x="10" y="30" width="8" height="8" rx="2"/>
-                <rect x="20" y="20" width="8" height="8" rx="2"/>
-                <rect x="30" y="10" width="8" height="8" rx="2"/>
-                <rect x="40" y="0" width="8" height="8" rx="2"/>
-                <rect x="50" y="10" width="8" height="8" rx="2"/>
-                <rect x="60" y="20" width="8" height="8" rx="2"/>
-                <rect x="70" y="30" width="8" height="8" rx="2"/>
-              </g>
-              <text x="160" y="90" font-family="Orbitron, sans-serif" font-size="48" fill="#B3F5FF">MARKETIFY</text>
-              <text x="160" y="140" font-family="Arial, sans-serif" font-size="20" fill="#00D0FF" letter-spacing="4">BRAND ON DEMAND</text>
-              <defs>
-                <linearGradient id="grad3" x1="0" y1="0" x2="100" y2="100">
-                  <stop stop-color="#FF7A18"/>
-                  <stop offset="1" stop-color="#AF002D"/>
-                </linearGradient>
-              </defs>
-            </svg>
+            <div style="max-width: 350px; margin: 0 auto; position: relative; height: 100px;">
+                <!-- Icon representation using CSS -->
+                <div style="position: absolute; left: 20px; top: 20px; width: 60px; height: 40px;">
+                    <div style="position: absolute; left: 0px; top: 30px; width: 8px; height: 8px; background: #FF7A18; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 8px; top: 22px; width: 8px; height: 8px; background: #E8651A; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 16px; top: 14px; width: 8px; height: 8px; background: #D1501C; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 24px; top: 6px; width: 8px; height: 8px; background: #BA3B1E; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 32px; top: 0px; width: 8px; height: 8px; background: #A32620; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 40px; top: 6px; width: 8px; height: 8px; background: #BA3B1E; border-radius: 2px;"></div>
+                   <div style="position: absolute; left: 48px; top: 14px; width: 8px; height: 8px; background: #D1501C; border-radius: 2px;"></div>
+                  <div style="position: absolute; left: 56px; top: 22px; width: 8px; height: 8px; background: #E8651A; border-radius: 2px;"></div>
+                </div>
+                <!-- Text -->
+                <div style="position: absolute; left: 90px; top: 15px;">
+                    <div style="font-family: Arial, sans-serif; font-size: 32px; font-weight: bold; color: #B3F5FF; margin: 0; line-height: 1;">MARKETIFY</div>
+                    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #00D0FF; letter-spacing: 2px; margin-top: 5px;">BRAND ON DEMAND</div>
+                </div>
+            </div>
         </div>
         <div class="content">
             <h1>Reset Your Password</h1>
@@ -54,7 +51,7 @@
             <p>If you didn't request this password reset, please ignore this email or contact us at <a href="mailto:support@marketify.com">support@marketify.com</a>.</p>
         </div>
         <div class="footer">
-            <p>Marketify Inc. | 123 Business Avenue, Bangalore, India</p>
+            <p>Marketify Inc. | #1-58/5/A, 2nd Floor, Opp. Furniture Palace, Above Bank of India, Gachibowli, Hyderabad, India</p>
             <p><a href="https://marketify.com">marketify.com</a> | <a href="mailto:support@marketify.com">support@marketify.com</a></p>
         </div>
     </div>

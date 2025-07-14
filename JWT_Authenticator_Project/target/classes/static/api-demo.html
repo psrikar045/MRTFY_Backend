@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Authenticator API Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .container {
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            min-height: 100px;
+        }
+        .error {
+            color: #d9534f;
+        }
+        .success {
+            color: #5cb85c;
+        }
+    </style>
+</head>
+<body>
+    <h1>JWT Authenticator API Demo</h1>
+    
+    <div class="container">
+        <h2>1. Authentication</h2>
+        <p>First, authenticate to get a JWT token:</p>
+        
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" placeholder="Enter username">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="Enter password">
+        </div>
+        
+        <div class="form-group">
+            <label for="brandId">Brand ID:</label>
+            <input type="text" id="brandId" placeholder="Enter brand ID">
+        </div>
+        
+        <button onclick="authenticate()">Authenticate</button>
+        
+        <div class="response" id="authResponse">
+            <p><em>Authentication response will appear here...</em></p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>2. Access Protected Resource</h2>
+        <p>Use the JWT token to access a protected resource:</p>
+        
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <input type="text" id="token" placeholder="JWT token from authentication">
+        </div>
+        
+        <div class="form-group">
+            <label for="headerBrandId">X-Brand-Id Header:</label>
+            <input type="text" id="headerBrandId" placeholder="Brand ID for header">
+        </div>
+        
+        <button onclick="accessProtected()">Access Protected Resource</button>
+        
+        <div class="response" id="protectedResponse">
+            <p><em>Protected resource response will appear here...</em></p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Required Headers</h2>
+        <p>For all authenticated requests, you must include:</p>
+        <pre><code>Authorization: Bearer {jwt_token}
+X-Brand-Id: {brand_id}</code></pre>
+        
+        <h3>Common Errors</h3>
+        <ul>
+            <li><strong>400 Bad Request</strong>: Missing X-Brand-Id header</li>
+            <li><strong>401 Unauthorized</strong>: Invalid or missing JWT token</li>
+            <li><strong>403 Forbidden</strong>: Insufficient permissions</li>
+        </ul>
+    </div>
+    
+    <script>
+        // Store the base URL
+        const baseUrl = window.location.origin;
+        
+        // Authentication function
+        async function authenticate() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const brandId = document.getElementById('brandId').value;
+            const authResponse = document.getElementById('authResponse');
+            
+            if (!username || !password) {
+                authResponse.innerHTML = '<p class="error">Please enter username and password</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${baseUrl}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        brandId: brandId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // If authentication was successful
+                    authResponse.innerHTML = `
+                        <p class="success">Authentication successful!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <p>Copy the token value to use in the next step.</p>
+                    `;
+                    
+                    // Auto-fill the token and brand ID fields
+                    document.getElementById('token').value = data.token;
+                    document.getElementById('headerBrandId').value = brandId;
+                } else {
+                    // If authentication failed
+                    authResponse.innerHTML = `
+                        <p class="error">Authentication failed!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                authResponse.innerHTML = `
+                    <p class="error">Error: ${error.message}</p>
+                `;
+            }
+        }
+        
+        // Access protected resource function
+        async function accessProtected() {
+            const token = document.getElementById('token').value;
+            const brandId = document.getElementById('headerBrandId').value;
+            const protectedResponse = document.getElementById('protectedResponse');
+            
+            if (!token) {
+                protectedResponse.innerHTML = '<p class="error">Please enter a JWT token</p>';
+                return;
+            }
+            
+            if (!brandId) {
+                protectedResponse.innerHTML = '<p class="error">Please enter a Brand ID for the header</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${baseUrl}/api/protected`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-Brand-Id': brandId
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.text();
+                    protectedResponse.innerHTML = `
+                        <p class="success">Successfully accessed protected resource!</p>
+                        <pre>${data}</pre>
+                    `;
+                } else {
+                    // Try to parse as JSON
+                    try {
+                        const errorData = await response.json();
+                        protectedResponse.innerHTML = `
+                            <p class="error">Failed to access protected resource! Status: ${response.status}</p>
+                            <pre>${JSON.stringify(errorData, null, 2)}</pre>
+                        `;
+                    } catch (e) {
+                        // If not JSON, show as text
+                        const errorText = await response.text();
+                        protectedResponse.innerHTML = `
+                            <p class="error">Failed to access protected resource! Status: ${response.status}</p>
+                            <pre>${errorText}</pre>
+                        `;
+                    }
+                }
+            } catch (error) {
+                protectedResponse.innerHTML = `
+                    <p class="error">Error: ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -84,4 +84,4 @@ If you encounter issues with the email functionality:
 2. Verify that the email configuration is correct
 3. Ensure that the SMTP server is accessible from the application
 4. Check that the templates are correctly formatted
-5. Verify that the logo file exists at `src/main/resources/static/images/logo.svg`
+5. Verify that the email templates contain the embedded HTML/CSS logo (no external logo files needed)

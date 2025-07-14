@@ -66,95 +66,6 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(htmlContent, true);
             
-            // Add logo as inline attachment
-            try {
-                // Try multiple possible locations for the logo
-                String[] logoPaths = {
-                    "static/images/logo_new.svg",
-                    "static/images/logo.svg",
-                    "static/logo.svg",
-                    "static/images/logo.png",
-                    "static/logo.png"
-                };
-                
-                boolean logoAttached = false;
-                for (String path : logoPaths) {
-                    org.springframework.core.io.Resource logoResource = 
-                        new org.springframework.core.io.ClassPathResource(path);
-                    logger.debug("Checking logo path: {} - exists: {}", path, logoResource.exists());
-                    if (logoResource.exists()) {
-                        helper.addInline("logo", logoResource);
-                        logger.info("Logo attached successfully from path: {}", path);
-                        logoAttached = true;
-                        break;
-                    }
-                }
-                
-                if (!logoAttached) {
-                    // Create the Marketify logo as a DataSource fallback
-                    logger.warn("No logo file found. Using inline SVG logo fallback.");
-                    
-                    try {
-                        final String logoText = "<svg viewBox=\"0 0 700 200\" xmlns=\"http://www.w3.org/2000/svg\">" +
-                                               "<rect width=\"700\" height=\"200\" fill=\"#0C0C30\"/>" +
-                                               "<g transform=\"translate(40,40)\" fill=\"url(#grad4)\">" +
-                                               "<rect x=\"0\" y=\"40\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"10\" y=\"30\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"20\" y=\"20\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"30\" y=\"10\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"40\" y=\"0\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"50\" y=\"10\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"60\" y=\"20\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "<rect x=\"70\" y=\"30\" width=\"8\" height=\"8\" rx=\"2\"/>" +
-                                               "</g>" +
-                                               "<text x=\"160\" y=\"90\" font-family=\"Orbitron, sans-serif\" font-size=\"48\" fill=\"#B3F5FF\">MARKETIFY</text>" +
-                                               "<text x=\"160\" y=\"140\" font-family=\"Arial, sans-serif\" font-size=\"20\" fill=\"#00D0FF\" letter-spacing=\"4\">BRAND ON DEMAND</text>" +
-                                               "<defs>" +
-                                               "<linearGradient id=\"grad4\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\">" +
-                                               "<stop stop-color=\"#FF7A18\"/>" +
-                                               "<stop offset=\"1\" stop-color=\"#AF002D\"/>" +
-                                               "</linearGradient>" +
-                                               "</defs>" +
-                                               "</svg>";
-                        
-                        DataSource dataSource = new DataSource() {
-                            @Override
-                            public InputStream getInputStream() throws IOException {
-                                return new ByteArrayInputStream(logoText.getBytes(StandardCharsets.UTF_8));
-                            }
-                            
-                            @Override
-                            public OutputStream getOutputStream() throws IOException {
-                                throw new UnsupportedOperationException("Read-only data source");
-                            }
-                            
-                            @Override
-                            public String getContentType() {
-                                return "image/svg+xml";
-                            }
-                            
-                            @Override
-                            public String getName() {
-                                return "logo.svg";
-                            }
-                        };
-                        
-                        helper.addInline("logo", dataSource);
-                        logger.info("Successfully added inline SVG Marketify logo as fallback");
-                        logoAttached = true;
-                    } catch (Exception e) {
-                        logger.error("Failed to create fallback logo: {}", e.getMessage());
-                    }
-                }
-                
-                if (!logoAttached) {
-                    logger.error("No logo could be attached to email");
-                }
-            } catch (Exception e) {
-                // Log but continue if logo can't be attached
-                logger.warn("Could not attach logo: {}", e.getMessage());
-            }
-            
             mailSender.send(message);
             logger.info("HTML email sent successfully to: {}", to);
         } catch (Exception e) {
@@ -171,13 +82,13 @@ public class EmailService {
             user.setEmail(to);
             user.setFirstName(username); // Using username as firstName if not available
             
-            String verificationUrl = baseUrl + "/auth/verify-email?token=" + verificationToken;
+            String verificationUrl = buildUrl("/auth/verify-email?token=" + verificationToken);
             logger.debug("Verification URL: {}", verificationUrl);
-            
             Map<String, Object> model = new HashMap<>();
             model.put("user", user);
             model.put("confirmationUrl", verificationUrl);
             model.put("baseUrl", baseUrl);
+            model.put("loginUrl", buildUrl("/login"));
             
             Configuration configuration = freeMarkerConfigurer.getConfiguration();
             Template template = configuration.getTemplate("registration-confirmation.ftl");
@@ -338,7 +249,7 @@ public class EmailService {
     public void sendPasswordResetEmail(String to, String username, String resetToken, String baseUrl) {
         logger.info("Sending password reset email to: {}", to);
         try {
-            String resetUrl = baseUrl + "/auth/reset-password?token=" + resetToken;
+String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             logger.debug("Reset URL: {}", resetUrl);
             
             Map<String, Object> model = new HashMap<>();
@@ -371,8 +282,7 @@ public class EmailService {
     private void sendFallbackPasswordResetEmail(String to, String username, String resetToken, String baseUrl) {
         logger.info("Sending fallback plain text password reset email to: {}", to);
         String subject = "Password Reset - Marketify";
-        String resetUrl = baseUrl + "/auth/reset-password?token=" + resetToken;
-        
+String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);        
         String emailBody = """
             Hello %s,
             
@@ -415,5 +325,14 @@ public class EmailService {
             logger.error("Failed to send test email to {}: {}", to, e.getMessage());
             return false;
         }
+    }
+   
+    /**
+     * Helper method to properly construct URLs by avoiding double slashes
+     */
+    public String buildUrl(String path) {
+        String cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String cleanPath = path.startsWith("/") ? path : "/" + path;
+        return cleanBaseUrl + cleanPath;
     }
 }
