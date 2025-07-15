@@ -22,6 +22,8 @@ public class BrandDataResponse {
     private String founded;
     private String companyType;
     private String employees;
+    private Long categoryId;
+    private Long subCategoryId;
     
     // Metadata
     private Double extractionTimeSeconds;

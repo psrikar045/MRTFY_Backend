@@ -5,6 +5,7 @@ import com.example.jwtauthenticator.entity.PasswordResetToken;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.repository.PasswordResetTokenRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
+import com.example.jwtauthenticator.security.JwtUserDetailsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,9 @@ public class PasswordResetService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+    
+    @Autowired
+    private JwtUserDetailsService userDetailsService;
 
     @Autowired
     private AppConfig appConfig;
@@ -58,8 +62,8 @@ public class PasswordResetService {
         }
 
         User user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
+        user.setPassword(newPassword); // Will be encoded by userDetailsService.save()
+        userDetailsService.save(user);
 
         // Send password reset confirmation email
         try {

@@ -112,7 +112,7 @@ public class BrandDataService {
     /**
      * Convert Brand entity to BrandDataResponse DTO
      */
-    private BrandDataResponse convertToResponse(Brand brand) {
+    public BrandDataResponse convertToResponse(Brand brand) {
         return BrandDataResponse.builder()
                 .id(brand.getId())
                 .name(brand.getName())
@@ -123,6 +123,8 @@ public class BrandDataService {
                 .founded(brand.getFounded())
                 .companyType(brand.getCompanyType())
                 .employees(brand.getEmployees())
+                .categoryId(brand.getCategoryId())
+                .subCategoryId(brand.getSubCategoryId())
                 .extractionTimeSeconds(brand.getExtractionTimeSeconds())
                 .lastExtractionTimestamp(brand.getLastExtractionTimestamp())
                 .extractionMessage(brand.getExtractionMessage())

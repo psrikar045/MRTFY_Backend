@@ -104,7 +104,7 @@ public class AuthService {
         User newUser = User.builder()
                 .id(brandId) // Set as primary key
                 .username(request.username())
-                .password(passwordEncoder.encode(request.password())) // Ensure password is encoded
+                .password(request.password()) // Don't encode here, JwtUserDetailsService.save() will encode it
                 .email(request.email())
                 .firstName(request.firstName())
                 .lastName(request.lastName())
@@ -188,7 +188,7 @@ public class AuthService {
                 
                 log.info("Email found, proceeding with authentication for user: {}", user.getUsername());
                 // Authenticate with the found user's username and brandId
-                return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+                return authenticateAndGenerateToken(user.getUsername(), password, user.getEmail());
             } else {
                 log.debug("Username format detected, attempting username-based login");
                 // Find user by username across all brands
@@ -197,7 +197,7 @@ public class AuthService {
                 
                 log.info("Username found, proceeding with authentication with brand ID: {}", user.getBrandId());
                 // Authenticate with the found user's brandId
-                return authenticateAndGenerateToken(usernameOrEmail, password, user.getBrandId());
+                return authenticateAndGenerateToken(usernameOrEmail, password, user.getEmail());
             }
         } catch (Exception e) {
             log.error("Login failed for identifier: {}, reason: {}", usernameOrEmail, e.getMessage());
@@ -223,7 +223,7 @@ public class AuthService {
                     .orElseThrow(() -> new RuntimeException("Invalid username or password"));
             
             // Authenticate with the found user's brandId
-            return authenticateAndGenerateToken(username, password, user.getBrandId());
+            return authenticateAndGenerateToken(username, password, user.getEmail());
         } catch (Exception e) {
             // Log failed login attempt
             Optional<User> userOpt = userRepository.findByUsername(username);
@@ -247,7 +247,7 @@ public class AuthService {
                     .orElseThrow(() -> new RuntimeException("Invalid email or password"));
             
             // Authenticate with the found user's brandId
-            return authenticateAndGenerateToken(user.getUsername(), password, user.getBrandId());
+            return authenticateAndGenerateToken(user.getUsername(), password, user.getEmail());
         } catch (Exception e) {
             // Log failed login attempt
             Optional<User> userOpt = userRepository.findByEmail(email);
@@ -265,11 +265,12 @@ public class AuthService {
         }
     }
     
-    private AuthResponse authenticateAndGenerateToken(String username, String password, String brandId) throws Exception {
-        authenticate(username, password, brandId);
+    private AuthResponse authenticateAndGenerateToken(String username, String password, String email) throws Exception {
+        authenticate(username, password, email);
         
-        final UserDetails userDetails = userDetailsService.loadUserByUsernameAndBrandId(username, brandId);
-        User user = userRepository.findByUsernameAndBrandId(username, brandId)
+        
+        final UserDetails userDetails = userDetailsService.loadUserByUsernameAndEmail(username, email);
+        User user = userRepository.findByUsernameAndEmail(username, email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!user.isEmailVerified()) {
@@ -321,10 +322,10 @@ public class AuthService {
         return "Email verified successfully!";
     }
 
-    private void authenticate(String username, String password, String brandId) throws Exception {
+    private void authenticate(String username, String password, String email) throws Exception {
         try {
             // Manual authentication for multi-brand setup
-            User user = userRepository.findByUsernameAndBrandId(username, brandId)
+            User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
             
             if (!passwordEncoder.matches(password, user.getPassword())) {
@@ -337,7 +338,7 @@ public class AuthService {
             
         } catch (BadCredentialsException e) {
             // Try to find user just for logging purposes
-            Optional<User> userOpt = userRepository.findByUsernameAndBrandId(username, brandId);
+            Optional<User> userOpt = userRepository.findByUsername(username);
             if (userOpt.isPresent()) {
                 // We found the user, so log the failure
                 logLogin(userOpt.get(), "PASSWORD", "FAILURE", "Authentication failed: " + e.getMessage());
@@ -345,7 +346,7 @@ public class AuthService {
                 // User not found, create a temporary user object just for logging
                 User tempUser = new User();
                 tempUser.setUsername(username);
-                tempUser.setBrandId(brandId);
+                tempUser.setBrandId("default");
                 tempUser.setUserId(UUID.randomUUID()); // Generate a temporary UUID
                 logLogin(tempUser, "PASSWORD", "FAILURE", "User not found with provided credentials");
             }
@@ -458,7 +459,7 @@ public class AuthService {
                 .email(googleUserInfo.getEmail())
                 .firstName(firstName)
                 .lastName(lastName)
-                .password(passwordEncoder.encode(UUID.randomUUID().toString())) // Random password for Google users
+                .password(UUID.randomUUID().toString()) // Random password for Google users, will be encoded by JwtUserDetailsService.save()
                 .role(Role.USER)
                 .authProvider(AuthProvider.GOOGLE)
                 .emailVerified(true) // Always true for Google users since Google has already verified the email
@@ -721,9 +722,9 @@ public class AuthService {
                 throw new RuntimeException("Password must be at least 8 characters long");
             }
     
-            user.setPassword(passwordEncoder.encode(request.newPassword()));
+            user.setPassword(request.newPassword()); // Will be encoded by userDetailsService.save()
             user.setUpdatedAt(LocalDateTime.now());
-            userRepository.save(user);
+            userDetailsService.save(user);
     
             // Mark the code as used - now it can't be used again
             resetCode.setUsed(true);

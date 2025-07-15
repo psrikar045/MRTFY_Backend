@@ -24,6 +24,7 @@ public class BrandExtractionService {
     private final BrandRepository brandRepository;
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
+    private final BrandCategoryResolutionService brandCategoryResolutionService;
     
     /**
      * Extract and store brand data from the API response
@@ -115,6 +116,9 @@ public class BrandExtractionService {
             brand.setExtractionTimeSeconds(response.getPerformance().getExtractionTimeSeconds());
         }
         
+        // Resolve and set category IDs based on industry
+        brandCategoryResolutionService.setCategoryIds(brand);
+        
         // Save brand first to get ID
         brand = brandRepository.save(brand);
         
@@ -165,6 +169,9 @@ public class BrandExtractionService {
         if (response.getPerformance() != null) {
             existingBrand.setExtractionTimeSeconds(response.getPerformance().getExtractionTimeSeconds());
         }
+        
+        // Re-resolve category IDs in case industry was updated
+        brandCategoryResolutionService.setCategoryIds(existingBrand);
         
         // Clear existing related data and add new data
         // Note: Due to cascade = CascadeType.ALL and orphanRemoval = true, 

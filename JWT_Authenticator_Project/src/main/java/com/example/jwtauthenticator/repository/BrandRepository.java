@@ -49,4 +49,16 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     
     // Count brands that have been claimed
     long countByIsBrandClaimedTrue();
+    
+    // Methods for category ID statistics and filtering
+    List<Brand> findByIndustryIgnoreCase(String industry);
+    long countByCategoryIdIsNotNull();
+    long countBySubCategoryIdIsNotNull();
+    long countByCategoryIdIsNotNullAndSubCategoryIdIsNotNull();
+    long countByCategoryIdIsNullAndSubCategoryIdIsNull();
+    
+    // Methods for the new endpoints
+    List<Brand> findByCategoryId(Long categoryId);
+    List<Brand> findByCategoryIdAndSubCategoryId(Long categoryId, Long subCategoryId);
+    Optional<Brand> findByIdAndCategoryIdAndSubCategoryId(Long id, Long categoryId, Long subCategoryId);
 }

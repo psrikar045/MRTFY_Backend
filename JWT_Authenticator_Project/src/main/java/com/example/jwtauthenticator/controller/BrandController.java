@@ -6,6 +6,7 @@ import com.example.jwtauthenticator.entity.BrandAsset;
 import com.example.jwtauthenticator.entity.BrandImage;
 import com.example.jwtauthenticator.repository.BrandAssetRepository;
 import com.example.jwtauthenticator.repository.BrandImageRepository;
+import com.example.jwtauthenticator.repository.BrandRepository;
 import com.example.jwtauthenticator.service.BrandDataService;
 import com.example.jwtauthenticator.service.BrandExtractionService;
 import com.example.jwtauthenticator.service.BrandManagementService;
@@ -35,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/brands")
@@ -49,6 +51,7 @@ public class BrandController {
     private final FileStorageService fileStorageService;
     private final BrandAssetRepository brandAssetRepository;
     private final BrandImageRepository brandImageRepository;
+    private final BrandRepository brandRepository;
     
     @GetMapping("/{id}")
     @Operation(
@@ -439,5 +442,205 @@ public class BrandController {
         error.put("error", message);
         error.put("timestamp", java.time.Instant.now().toString());
         return error;
+    }
+    
+    /**
+     * Endpoint 1: Get All Brands
+     * Path: /brands
+     * Method: GET
+     */
+    @GetMapping("/all")
+    @Operation(
+        summary = "Get all brands",
+        description = "Retrieve a list of all brands from the brands table",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getAllBrands() {
+        try {
+            List<Brand> brands = brandRepository.findAll();
+            List<BrandDataResponse> response = brands.stream()
+                .map(brandDataService::convertToResponse)
+                .collect(Collectors.toList());
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("data", response);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error retrieving all brands", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Error retrieving brands: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Endpoint 2: Get Brands by Category
+     * Path: /brands/category/:categoryId
+     * Method: GET
+     */
+    @GetMapping("/category/{categoryId}")
+    @Operation(
+        summary = "Get brands by category",
+        description = "Retrieve a list of brands associated with the provided categoryId",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
+        @ApiResponse(responseCode = "400", description = "Invalid category ID"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getBrandsByCategory(
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long categoryId) {
+        
+        try {
+            if (categoryId == null || categoryId <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid category ID"));
+            }
+            
+            List<Brand> brands = brandRepository.findByCategoryId(categoryId);
+            
+            List<BrandDataResponse> response = brands.stream()
+                .map(brandDataService::convertToResponse)
+                .collect(Collectors.toList());
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("data", response);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error retrieving brands by category ID: {}", categoryId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Error retrieving brands: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Endpoint 3: Get Brands by Category and Subcategory
+     * Path: /brands/category/:categoryId/subcategory/:subCategoryId
+     * Method: GET
+     */
+    @GetMapping("/category/{categoryId}/subcategory/{subCategoryId}")
+    @Operation(
+        summary = "Get brands by category and subcategory",
+        description = "Retrieve a list of brands associated with both the provided categoryId and subCategoryId",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
+        @ApiResponse(responseCode = "400", description = "Invalid category or subcategory ID"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getBrandsByCategoryAndSubcategory(
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long categoryId,
+            @Parameter(description = "Subcategory ID", required = true)
+            @PathVariable Long subCategoryId) {
+        
+        try {
+            if (categoryId == null || categoryId <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid category ID"));
+            }
+            
+            if (subCategoryId == null || subCategoryId <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid subcategory ID"));
+            }
+            
+            List<Brand> brands = brandRepository.findByCategoryIdAndSubCategoryId(categoryId, subCategoryId);
+            
+            List<BrandDataResponse> response = brands.stream()
+                .map(brandDataService::convertToResponse)
+                .collect(Collectors.toList());
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("data", response);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error retrieving brands by category ID: {} and subcategory ID: {}", 
+                    categoryId, subCategoryId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Error retrieving brands: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Endpoint 4: Get Specific Brand by ID, Category, and Subcategory
+     * Path: /brands/:id/category/:categoryId/subcategory/:subCategoryId
+     * Method: GET
+     */
+    @GetMapping("/{id}/category/{categoryId}/subcategory/{subCategoryId}")
+    @Operation(
+        summary = "Get specific brand by ID, category, and subcategory",
+        description = "Retrieve a specific brand based on its id, categoryId, and subCategoryId",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Brand found"),
+        @ApiResponse(responseCode = "400", description = "Invalid parameters"),
+        @ApiResponse(responseCode = "404", description = "Brand not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getBrandByIdCategoryAndSubcategory(
+            @Parameter(description = "Brand ID", required = true)
+            @PathVariable Long id,
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long categoryId,
+            @Parameter(description = "Subcategory ID", required = true)
+            @PathVariable(required = false) Long subCategoryId) {
+        
+        try {
+            if (id == null || id <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid brand ID"));
+            }
+            
+            if (categoryId == null || categoryId <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid category ID"));
+            }
+            
+            // Allow null subcategory ID
+            if (subCategoryId != null && subCategoryId <= 0) {
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Invalid subcategory ID"));
+            }
+            
+            Optional<Brand> brandOpt;
+            
+            if (subCategoryId == null) {
+                // If subCategoryId is null, find by id and categoryId only
+                brandOpt = brandRepository.findById(id)
+                    .filter(brand -> categoryId.equals(brand.getCategoryId()) && 
+                                    brand.getSubCategoryId() == null);
+            } else {
+                // If subCategoryId is provided, find by all three criteria
+                brandOpt = brandRepository.findByIdAndCategoryIdAndSubCategoryId(id, categoryId, subCategoryId);
+            }
+            
+            if (brandOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(createErrorResponse("Brand not found with ID: " + id + 
+                            ", category ID: " + categoryId + 
+                            (subCategoryId != null ? ", subcategory ID: " + subCategoryId : "")));
+            }
+            
+            Brand brand = brandOpt.get();
+            
+            BrandDataResponse response = brandDataService.convertToResponse(brand);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("data", response);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error retrieving brand by ID: {}, category ID: {}, subcategory ID: {}", 
+                    id, categoryId, subCategoryId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Error retrieving brand: " + e.getMessage()));
+        }
     }
 }

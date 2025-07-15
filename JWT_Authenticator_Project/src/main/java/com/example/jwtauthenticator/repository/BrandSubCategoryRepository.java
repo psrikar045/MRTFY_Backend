@@ -28,4 +28,7 @@ public interface BrandSubCategoryRepository extends JpaRepository<BrandSubCatego
 
     // Fetch by other fields
     List<BrandSubCategory> findByIsActive(Boolean isActive);
+    
+    // Case-insensitive search for subcategory name with active status
+    Optional<BrandSubCategory> findBySubCategoryNameIgnoreCaseAndIsActive(String subCategoryName, Boolean isActive);
 }

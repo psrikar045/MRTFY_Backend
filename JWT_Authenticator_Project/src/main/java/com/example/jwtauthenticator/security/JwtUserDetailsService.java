@@ -30,12 +30,25 @@ public class JwtUserDetailsService implements UserDetailsService {
 
     public UserDetails loadUserByUsernameAndBrandId(String username, String brandId) throws UsernameNotFoundException {
         // First try to find by username and brandId
-        Optional<User> userOptional = userRepository.findByUsernameAndBrandId(username, brandId);
+        Optional<User> userOptional = userRepository.findByUsername(username);
         
         // If not found and we're using the default brand, try just by username
         if (!userOptional.isPresent() && "default".equals(brandId)) {
             userOptional = userRepository.findByUsername(username);
         }
+        
+        if (!userOptional.isPresent()) {
+            throw new UsernameNotFoundException("User not found with username: " + username);
+        }
+        
+        User user = userOptional.get();
+        return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(),
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+    }
+    public UserDetails loadUserByUsernameAndEmail(String username, String email) throws UsernameNotFoundException {
+        // First try to find by username and brandId
+        Optional<User> userOptional = userRepository.findByUsernameAndEmail(username, email);
+        
         
         if (!userOptional.isPresent()) {
             throw new UsernameNotFoundException("User not found with username: " + username);

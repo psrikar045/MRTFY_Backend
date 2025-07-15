@@ -44,8 +44,15 @@ public class Brand {
     private String employees;
     @Column(name = "category_id")
     private Long categoryId;
+    
     @Column(name = "sub_category_id")
     private Long subCategoryId;
+    
+    @Column(name = "future_column_1")
+    private String futureColumn1;
+    
+    @Column(name = "future_column_2")
+    private String futureColumn2;
     
     // Extraction metadata
     @Column(name = "extraction_time_seconds")

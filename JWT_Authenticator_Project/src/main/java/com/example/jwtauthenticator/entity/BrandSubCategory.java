@@ -36,6 +36,7 @@ public class BrandSubCategory {
     private String subCategoryDescription;
 
     @Column(name = "isactive", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
 
     @Column(name = "createddate", nullable = false, updatable = false)
