@@ -18,10 +18,10 @@ public class Country {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "CountryID")
+    @Column(name = "countryid")
     private Long id;
 
-    @Column(name = "RegionID", nullable = false)
+    @Column(name = "regionid", nullable = false)
     private Long regionId; // Foreign key reference
 
     // If you prefer a direct JPA relationship, uncomment the following and comment out regionId:
@@ -29,36 +29,39 @@ public class Country {
     // @JoinColumn(name = "RegionID", nullable = false, insertable = false, updatable = false)
     // private Region region;
 
-    @Column(name = "CountryName", nullable = false)
+    @Column(name = "countryname", nullable = false)
     private String countryName;
 
-    @Column(name = "CountryCode", unique = true)
+    @Column(name = "country_code", unique = true)
     private String countryCode;
 
-    @Column(name = "CountryDescription")
+    @Column(name = "country_description")
     private String countryDescription;
 
-    @Column(name = "IsActive", nullable = false)
+    @Column(name = "isactive", nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "CreatedDate", nullable = false, updatable = false)
+    @Column(name = "createddate", nullable = false, updatable = false)
     private LocalDateTime createdDate;
 
-    @Column(name = "LastModifiedDate", nullable = false)
+    @Column(name = "lastmodifieddate", nullable = false)
     private LocalDateTime lastModifiedDate;
 
-    @Column(name = "ExternalID", unique = true)
+    @Column(name = "externalid", unique = true)
     private String externalId;
 
-    @Column(name = "DisplayOrder")
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "FlagURL")
+    @Column(name = "flagurl")
     private String flagURL;
 
-    @Column(name = "MetaData", columnDefinition = "jsonb")
+    @Column(name = "meta_data", columnDefinition = "jsonb")
     private String metaData; // Stores JSON as a String
 
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private String metaData2; // Stores JSON as a String
+    
     @PrePersist
     protected void onCreate() {
         createdDate = LocalDateTime.now();

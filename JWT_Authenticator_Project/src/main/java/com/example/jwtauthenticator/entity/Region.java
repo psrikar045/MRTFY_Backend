@@ -18,38 +18,41 @@ public class Region {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "RegionID")
+    @Column(name = "regionid")
     private Long id;
 
-    @Column(name = "RegionName", nullable = false, unique = true)
+    @Column(name = "regionname", nullable = false, unique = true)
     private String regionName;
 
-    @Column(name = "RegionCode", unique = true)
+    @Column(name = "region_code", unique = true)
     private String regionCode;
 
-    @Column(name = "RegionDescription")
+    @Column(name = "region_description")
     private String regionDescription;
 
-    @Column(name = "IsActive", nullable = false)
+    @Column(name = "isactive", nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "CreatedDate", nullable = false, updatable = false)
+    @Column(name = "createddate", nullable = false, updatable = false)
     private LocalDateTime createdDate;
 
-    @Column(name = "LastModifiedDate", nullable = false)
+    @Column(name = "lastmodifieddate", nullable = false)
     private LocalDateTime lastModifiedDate;
 
-    @Column(name = "ExternalID", unique = true)
+    @Column(name = "externalid", unique = true)
     private String externalId;
 
-    @Column(name = "DisplayOrder")
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "IconURL")
+    @Column(name = "iconurl")
     private String iconURL;
 
-    @Column(name = "MetaData", columnDefinition = "jsonb")
+    @Column(name = "meta_data", columnDefinition = "jsonb")
     private String metaData; // Stores JSON as a String
+    
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private String metaData2; // Stores JSON as a String
 
     @PrePersist
     protected void onCreate() {

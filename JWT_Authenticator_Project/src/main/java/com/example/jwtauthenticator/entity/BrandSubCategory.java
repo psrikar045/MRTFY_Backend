@@ -18,10 +18,10 @@ public class BrandSubCategory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "SubCategoryID")
+    @Column(name = "subcategoryid")
     private Long id;
 
-    @Column(name = "CategoryID", nullable = false)
+    @Column(name = "categoryid", nullable = false)
     private Long categoryId; // Foreign key reference
 
     // If you prefer a direct JPA relationship, uncomment the following and comment out categoryId:
@@ -29,31 +29,31 @@ public class BrandSubCategory {
     // @JoinColumn(name = "CategoryID", nullable = false, insertable = false, updatable = false)
     // private BrandCategory brandCategory;
 
-    @Column(name = "SubCategoryName", nullable = false)
+    @Column(name = "subcategoryname", nullable = false)
     private String subCategoryName;
 
-    @Column(name = "SubCategoryDescription")
+    @Column(name = "sub_category_description")
     private String subCategoryDescription;
 
-    @Column(name = "IsActive", nullable = false)
+    @Column(name = "isactive", nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "CreatedDate", nullable = false, updatable = false)
+    @Column(name = "createddate", nullable = false, updatable = false)
     private LocalDateTime createdDate;
 
-    @Column(name = "LastModifiedDate", nullable = false)
+    @Column(name = "lastmodifieddate", nullable = false)
     private LocalDateTime lastModifiedDate;
 
-    @Column(name = "ExternalID", unique = true)
+    @Column(name = "externalid", unique = true)
     private String externalId;
 
-    @Column(name = "DisplayOrder")
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "IconURL")
+    @Column(name = "iconurl")
     private String iconURL;
 
-    @Column(name = "MetaData", columnDefinition = "jsonb")
+    @Column(name = "metadata", columnDefinition = "jsonb")
     private String metaData; // Stores JSON as a String
 
     @PrePersist

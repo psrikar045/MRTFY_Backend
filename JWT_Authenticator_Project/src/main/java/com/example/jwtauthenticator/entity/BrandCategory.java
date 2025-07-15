@@ -17,31 +17,31 @@ public class BrandCategory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "CategoryID")
+    @Column(name = "categoryid")
     private Long id;
 
-    @Column(name = "CategoryName", nullable = false, unique = true)
+    @Column(name = "categoryname", nullable = false, unique = true)
     private String categoryName;
 
-    @Column(name = "CategoryDescription")
+    @Column(name = "category_description")
     private String categoryDescription;
 
-    @Column(name = "IsActive", nullable = false)
+    @Column(name = "isactive", nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "CreatedDate", nullable = false, updatable = false)
+    @Column(name = "createddate", nullable = false, updatable = false)
     private LocalDateTime createdDate;
 
-    @Column(name = "LastModifiedDate", nullable = false)
+    @Column(name = "lastmodifieddate", nullable = false)
     private LocalDateTime lastModifiedDate;
 
-    @Column(name = "ExternalID", unique = true)
+    @Column(name = "externalid", unique = true)
     private String externalId;
 
-    @Column(name = "DisplayOrder")
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "IconURL")
+    @Column(name = "iconurl")
     private String iconURL;
 
     // Lifecycle callbacks for CreatedDate and LastModifiedDate (if not using Hibernate specific annotations like @CreationTimestamp, @UpdateTimestamp)
