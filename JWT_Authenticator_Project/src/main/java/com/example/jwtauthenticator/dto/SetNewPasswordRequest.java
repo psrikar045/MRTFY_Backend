@@ -7,9 +7,9 @@ import jakarta.validation.constraints.Size;
 
 @Schema(description = "Set new password request")
 public record SetNewPasswordRequest(
-    @Schema(description = "User ID", example = "MRTFY000001")
-    @NotBlank(message = "User ID is required")
-    String userId,
+//    @Schema(description = "User ID", example = "MRTFY000001")
+//    @NotBlank(message = "User ID is required")
+//    String userId,
     
     @Schema(description = "Email address", example = "user@example.com")
     @Email(message = "Email should be valid")

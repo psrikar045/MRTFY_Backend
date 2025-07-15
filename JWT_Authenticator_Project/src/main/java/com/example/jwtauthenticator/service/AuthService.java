@@ -688,13 +688,13 @@ public class AuthService {
     public String setNewPassword(SetNewPasswordRequest request) {
         try {
             // Validate user ID format
-            if (!request.userId().matches("MRTFY\\d{6}")) {
-                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
-            }
+//            if (!request.userId().matches("MRTFY\\d{6}")) {
+//                throw new RuntimeException("Invalid user ID format. Expected format: MRTFY000001");
+//            }
             
             // Verify the code again before allowing password reset
             Optional<PasswordResetCode> resetCodeOpt = passwordResetCodeRepository
-                    .findByEmailAndUserIdAndCodeAndUsedFalse(request.email(), request.userId(), request.code());
+                    .findByEmailAndCodeAndUsedFalse(request.email(), request.code());
     
             if (resetCodeOpt.isEmpty()) {
                 throw new RuntimeException("Invalid verification code or code already used");
@@ -708,7 +708,7 @@ public class AuthService {
             }
     
             // Find and update user password
-            User user = userRepository.findById(request.userId())
+            User user = userRepository.findByEmail(request.email())
                     .orElseThrow(() -> new RuntimeException("User not found"));
                     
             // Verify email matches
