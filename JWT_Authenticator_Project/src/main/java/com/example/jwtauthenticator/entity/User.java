@@ -10,6 +10,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.UUID;
 
 @Data
@@ -102,7 +103,36 @@ public class User {
         }
         // For Google users, emailVerified should already be set to true by the builder
     }
-
+    @Column(name = "futureV1")
+    private String futureV1;
+    @Column(name = "futureV2")
+    private String futureV2;
+    @Column(name = "futureV3")
+    private String futureV3;
+    @Column(name = "futureV4")
+    private String futureV4;
+    @Column(name = "futureV5")
+    private String futureV5;
+  
+    @Column(name = "futureI1")
+    private String futureI1;
+    @Column(name = "futureI2")
+    private String futureI2;
+    @Column(name = "futureI3")
+    private String futureI3;
+    @Column(name = "futureI4")
+    private String futureI4;
+    @Column(name = "futureI5")
+    private String futureI5;
+    
+    @Column(name = "futureT1")
+    private Date futureT1;
+    @Column(name = "futureT2")
+    private Date futureT2;
+    @Column(name = "futureT3")
+    private Date futureT3;
+    
+    
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
