@@ -208,6 +208,7 @@
                                         <source>21</source>
                                         <target>21</target>
                                         <fork>true</fork>
+                                        <parameters>true</parameters>
                                 </configuration>
                         </plugin>
                         <plugin>

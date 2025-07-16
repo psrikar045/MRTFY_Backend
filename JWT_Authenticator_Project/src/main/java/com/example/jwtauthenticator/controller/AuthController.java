@@ -66,8 +66,6 @@ public class AuthController {
     @Autowired
     private RateLimiterService rateLimiterService;
     
-    @Autowired
-    private UserRepository userRepository;
     
     @Autowired
     private BrandInfoService brandInfoService;
@@ -91,24 +89,7 @@ public class AuthController {
         }
     }
     
-    @Operation(summary = "Fetch User Profile", 
-            description = "Fetch User Profile using User ID")
- @ApiResponses(value = {
-         @ApiResponse(responseCode = "200", description = "User registered successfully"),
-         @ApiResponse(responseCode = "400", description = "Username or email already exists")
- })
- @GetMapping("/profile")
- public ResponseEntity<?> userProfile(@Valid @RequestBody RegisterRequest request) {
-     try {
-         RegisterResponse response = authService.registerUser(request);
-         return ResponseEntity.ok(response);
-     } catch (Exception e) {
-         return ResponseEntity.badRequest().body(Map.of(
-             "success", false,
-             "message", e.getMessage()
-         ));
-     }
- }
+
 
     @Operation(
         summary = "Generate authentication token", 
