@@ -104,7 +104,7 @@ public class SecurityConfig {
                         // Health check
                         "/actuator/health",
                         "/api/category/hierarchy",
-                        "/api/brands/**"
+                        "/api/brands/all"
                         
                     ).permitAll()
                     .anyRequest().authenticated()

@@ -157,8 +157,7 @@ public class BrandController {
     @GetMapping
     @Operation(
         summary = "Get all brands",
-        description = "Retrieve all brands with pagination",
-        security = { @SecurityRequirement(name = "Bearer Authentication") }
+        description = "Retrieve all brands with pagination"
     )
     public ResponseEntity<Page<BrandDataResponse>> getAllBrands(
             @Parameter(description = "Page number (0-based)", example = "0")
@@ -452,8 +451,7 @@ public class BrandController {
     @GetMapping("/all")
     @Operation(
         summary = "Get all brands",
-        description = "Retrieve a list of all brands from the brands table",
-        security = { @SecurityRequirement(name = "Bearer Authentication") }
+        description = "Retrieve a list of all brands from the brands table"
     )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
