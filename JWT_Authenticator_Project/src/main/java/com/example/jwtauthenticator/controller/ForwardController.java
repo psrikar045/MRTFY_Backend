@@ -1,9 +1,11 @@
 package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.dto.ForwardRequest;
+import com.example.jwtauthenticator.dto.BrandExtractionResponse;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.util.JwtUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.ConsumptionProbe;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,6 +45,7 @@ public class ForwardController {
     private final ForwardService forwardService;
     private final RateLimiterService rateLimiterService;
     private final JwtUtil jwtUtil;
+    private final ObjectMapper objectMapper;
 
     @PostMapping
     @Operation(
@@ -60,7 +63,11 @@ public class ForwardController {
         }
     )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Request forwarded successfully"),
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Request forwarded successfully",
+            content = @Content(schema = @Schema(implementation = BrandExtractionResponse.class))
+        ),
         @ApiResponse(responseCode = "400", description = "Bad Request - Invalid URL or missing required headers"),
         @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing JWT token"),
         @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded"),
@@ -98,8 +105,16 @@ public class ForwardController {
             CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
             ResponseEntity<String> extResponse = future.get();
             log.info("userId={} | url={} | status={} | duration={}ms", userId, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);
+            
             if (extResponse.getStatusCode().is2xxSuccessful()) {
-                return ResponseEntity.ok(extResponse.getBody());
+                // Parse the response into BrandExtractionResponse object
+                try {
+                    BrandExtractionResponse brandResponse = objectMapper.readValue(extResponse.getBody(), BrandExtractionResponse.class);
+                    return ResponseEntity.ok(brandResponse);
+                } catch (Exception parseException) {
+                    log.error("Failed to parse external API response as BrandExtractionResponse for URL: {}", request.url(), parseException);
+                    return buildError("Failed to parse external API response", HttpStatus.INTERNAL_SERVER_ERROR);
+                }
             }
             return ResponseEntity.status(extResponse.getStatusCode())
                     .body(buildErrorMap("External API error: " + extResponse.getBody(), extResponse.getStatusCode()));
