@@ -2,6 +2,7 @@ package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.dto.BrandDataResponse;
 import com.example.jwtauthenticator.dto.UserIdDTO;
+import com.example.jwtauthenticator.dto.UserProfileUpdateRequestDTO;
 import com.example.jwtauthenticator.dto.UserResponseDTO;
 import com.example.jwtauthenticator.service.CategoryService;
 import com.example.jwtauthenticator.service.UserService;
@@ -23,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +56,16 @@ public class UserController {
         })
     public ResponseEntity<UserResponseDTO> getUserByIdPost(@Valid @RequestBody UserIdDTO requestDTO) {
         return userService.getUserInfoByUserId(requestDTO.getId())
+                .map(userResponseDTO -> new ResponseEntity<>(userResponseDTO, HttpStatus.OK))
+                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+    
+    @PutMapping("/{userId}/profile")
+    public ResponseEntity<UserResponseDTO> updateProfile(
+            @PathVariable UUID userId,
+            @Valid @RequestBody UserProfileUpdateRequestDTO updateRequest) {
+
+        return userService.updateProfile(userId, updateRequest)
                 .map(userResponseDTO -> new ResponseEntity<>(userResponseDTO, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
