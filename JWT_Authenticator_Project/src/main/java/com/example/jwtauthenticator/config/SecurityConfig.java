@@ -102,7 +102,10 @@ public class SecurityConfig {
                         "/swagger-ui.html", 
                         
                         // Health check
-                        "/actuator/health"
+                        "/actuator/health",
+                        "/api/category/hierarchy",
+                        "/api/brands/**"
+                        
                     ).permitAll()
                     .anyRequest().authenticated()
                 )

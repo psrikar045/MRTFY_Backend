@@ -30,8 +30,7 @@ public class CategoryController {
 	 @GetMapping("/hierarchy")
 	    @Operation(
 	        summary = "Get all hierarchical master data",
-	        description = "Retrieve all brand categories with their subcategories and regions with their countries in a complete hierarchical structure.",
-	        security = { @SecurityRequirement(name = "Bearer Authentication") }
+	        description = "Retrieve all brand categories with their subcategories and regions with their countries in a complete hierarchical structure."
 	    )
 	    @ApiResponses(value = {
 	        @ApiResponse(responseCode = "200", description = "Hierarchical master data successfully retrieved",
