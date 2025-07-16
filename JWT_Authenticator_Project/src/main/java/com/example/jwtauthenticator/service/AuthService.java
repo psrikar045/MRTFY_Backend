@@ -286,7 +286,7 @@ public class AuthService {
         // Log successful password login
         logLogin(user, "PASSWORD", "SUCCESS", "Password login successful");
 
-        return new AuthResponse(token, refreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
+        return new AuthResponse(token, refreshToken, user.getId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
     public AuthResponse refreshToken(String oldRefreshToken) throws Exception {
