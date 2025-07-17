@@ -35,9 +35,9 @@ public class UserService {
     
     
     @Transactional
-    public Optional<UserResponseDTO> updateProfile(UUID userId, UserProfileUpdateRequestDTO updateRequest) {
+    public Optional<UserResponseDTO> updateProfile( UserProfileUpdateRequestDTO updateRequest) {
         // Find the user by userId (assuming userId is passed in the path)
-        Optional<User> userOptional = userRepository.findByUserId(userId);
+        Optional<User> userOptional = userRepository.findById(updateRequest.getId());
 
         if (userOptional.isPresent()) {
             User user = userOptional.get();

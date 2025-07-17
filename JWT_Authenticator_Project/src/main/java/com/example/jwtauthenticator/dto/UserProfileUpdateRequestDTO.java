@@ -14,7 +14,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserProfileUpdateRequestDTO {
-
+	private String id;
     private String firstName;
     private String surname; 
     

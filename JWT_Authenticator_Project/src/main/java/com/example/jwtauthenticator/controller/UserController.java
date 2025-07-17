@@ -8,6 +8,7 @@ import com.example.jwtauthenticator.service.CategoryService;
 import com.example.jwtauthenticator.service.UserService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -60,12 +61,11 @@ public class UserController {
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
     
-    @PutMapping("/{userId}/profile")
+    @PutMapping("/profile")
     public ResponseEntity<UserResponseDTO> updateProfile(
-            @PathVariable UUID userId,
             @Valid @RequestBody UserProfileUpdateRequestDTO updateRequest) {
 
-        return userService.updateProfile(userId, updateRequest)
+        return userService.updateProfile( updateRequest)
                 .map(userResponseDTO -> new ResponseEntity<>(userResponseDTO, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
