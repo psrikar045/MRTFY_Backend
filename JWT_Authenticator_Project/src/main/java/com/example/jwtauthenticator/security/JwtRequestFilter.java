@@ -144,7 +144,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             "/api/id-generator/user-id/init-sequence",
             "/actuator/health",
             "/hello",
-            "/api/brands/all"
+            "/api/brands/all",
+            "/api/category/hierarchy"
         };
         
         // Log the incoming path for debugging
