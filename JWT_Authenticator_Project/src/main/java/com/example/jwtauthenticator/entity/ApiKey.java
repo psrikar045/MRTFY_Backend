@@ -69,6 +69,9 @@ public class ApiKey {
     @Column(name = "rate_limit_tier", length = 50)
     private String rateLimitTier;
 
+    @Column(name = "scopes", columnDefinition = "TEXT")
+    private String scopes; // Comma-separated list of granted permissions/scopes
+    
     @PrePersist
     protected void onCreate() {
         if (this.id == null) {
@@ -117,4 +120,27 @@ public class ApiKey {
             this.allowedDomains = domains.stream().collect(Collectors.joining(","));
         }
     }
+    
+    // --- NEW HELPER FOR SCOPES ---
+    public List<String> getScopesAsList() {
+        if (scopes == null || scopes.trim().isEmpty()) {
+            return List.of();
+        }
+        return Arrays.stream(scopes.split(","))
+                     .map(String::trim)
+                     .map(String::toUpperCase) // Conventionally scopes are uppercase
+                     .collect(Collectors.toList());
+    }
+
+    public void setScopesAsList(List<String> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            this.scopes = null;
+        } else {
+            this.scopes = scopes.stream()
+                                .map(String::trim)
+                                .map(String::toUpperCase)
+                                .collect(Collectors.joining(","));
+        }
+    }
+    
 }
