@@ -175,7 +175,7 @@ public class AuthController {
                 )
             )
             @Valid @RequestBody LoginRequest loginRequest) throws Exception {
-        AuthResponse authResponse = authService.loginUser(loginRequest.username(), loginRequest.password());
+        AuthResponse authResponse = authService.loginUserWithNameOrEmail(loginRequest.username(), loginRequest.password());
         return ResponseEntity.ok(authResponse);
     }
     
