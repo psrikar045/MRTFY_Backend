@@ -30,5 +30,8 @@ public class ApiKeyCreateRequestDTO {
     private List<String> allowedIps;    
     private List<String> allowedDomains; 
     
-    private String rateLimitTier; // Optional (e.g., "FREE", "PRO")
+    private String rateLimitTier; // Optional (e.g., "BASIC", "STANDARD", "PREMIUM", "UNLIMITED")
+    
+    // New field for scopes
+    private List<String> scopes; // Optional: List of scope names (e.g., ["READ_USERS", "WRITE_BRANDS"])
 }

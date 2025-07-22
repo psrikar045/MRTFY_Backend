@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class BrandCategoryResolutionServiceTest {
@@ -60,7 +61,7 @@ class BrandCategoryResolutionServiceTest {
     @Test
     void testResolveCategoryIds_MatchesCategory() {
         // Given
-        when(brandCategoryRepository.findByCategoryNameIgnoreCaseAndIsActive("Technology", true))
+        lenient().when(brandCategoryRepository.findByCategoryNameIgnoreCaseAndIsActive("Technology", true))
                 .thenReturn(Optional.of(testCategory));
 
         // When
@@ -94,9 +95,9 @@ class BrandCategoryResolutionServiceTest {
     @Test
     void testResolveCategoryIds_NoMatch() {
         // Given
-        when(brandCategoryRepository.findByCategoryNameIgnoreCaseAndIsActive(anyString(), eq(true)))
+        lenient().when(brandCategoryRepository.findByCategoryNameIgnoreCaseAndIsActive(anyString(), eq(true)))
                 .thenReturn(Optional.empty());
-        when(brandSubCategoryRepository.findBySubCategoryNameIgnoreCaseAndIsActive(anyString(), eq(true)))
+        lenient().when(brandSubCategoryRepository.findBySubCategoryNameIgnoreCaseAndIsActive(anyString(), eq(true)))
                 .thenReturn(Optional.empty());
 
         // When

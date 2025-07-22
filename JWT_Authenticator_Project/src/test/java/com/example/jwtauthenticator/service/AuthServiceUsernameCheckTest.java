@@ -30,7 +30,7 @@ public class AuthServiceUsernameCheckTest {
     public void testCheckUsernameExists_WithBrandId_Exists() {
         // Given
         CheckUsernameRequest request = new CheckUsernameRequest("existingUser", "brand1");
-        when(userRepository.existsByUsernameAndBrandId("existingUser", "brand1")).thenReturn(true);
+        when(userRepository.existsByUsername("existingUser")).thenReturn(true);
 
         // When
         boolean result = authService.checkUsernameExists(request);
@@ -43,7 +43,7 @@ public class AuthServiceUsernameCheckTest {
     public void testCheckUsernameExists_WithBrandId_NotExists() {
         // Given
         CheckUsernameRequest request = new CheckUsernameRequest("newUser", "brand1");
-        when(userRepository.existsByUsernameAndBrandId("newUser", "brand1")).thenReturn(false);
+        when(userRepository.existsByUsername("newUser")).thenReturn(false);
 
         // When
         boolean result = authService.checkUsernameExists(request);

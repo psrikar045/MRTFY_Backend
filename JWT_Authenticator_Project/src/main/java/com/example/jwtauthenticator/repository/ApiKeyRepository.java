@@ -11,7 +11,7 @@ import java.util.UUID;
 @Repository
 public interface ApiKeyRepository extends JpaRepository<ApiKey, UUID> {
 
-    Optional<ApiKey> findByKeyValue(String keyValue);
+    Optional<ApiKey> findByKeyHash(String keyHash);
 
     /**
      * Finds all API keys associated with a specific user, identified by their String 'id'.
@@ -29,5 +29,5 @@ public interface ApiKeyRepository extends JpaRepository<ApiKey, UUID> {
      */
     Optional<ApiKey> findByIdAndUserFkId(UUID id, String userFkId);
 
-    Boolean existsByKeyValue(String keyValue);
+    Boolean existsByKeyHash(String keyHash);
 }

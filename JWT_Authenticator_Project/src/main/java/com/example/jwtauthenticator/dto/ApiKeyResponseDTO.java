@@ -30,6 +30,7 @@ public class ApiKeyResponseDTO {
     private List<String> allowedIps;
     private List<String> allowedDomains;
     private String rateLimitTier;
+    private List<String> scopes; // List of scope names
 
     // Static factory method for converting an ApiKey entity to this DTO
     public static ApiKeyResponseDTO fromEntity(ApiKey apiKey) {
@@ -48,6 +49,7 @@ public class ApiKeyResponseDTO {
                 .allowedIps(apiKey.getAllowedIpsAsList())
                 .allowedDomains(apiKey.getAllowedDomainsAsList())
                 .rateLimitTier(apiKey.getRateLimitTier())
+                .scopes(apiKey.getScopesAsList())
                 .build();
     }
 }

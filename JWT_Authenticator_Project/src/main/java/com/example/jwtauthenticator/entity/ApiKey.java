@@ -25,8 +25,8 @@ public class ApiKey {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "key_value", unique = true, nullable = false, length = 255)
-    private String keyValue;
+    @Column(name = "key_hash", unique = true, nullable = false, length = 255)
+    private String keyHash; // Store SHA-256 hash of the actual key
 
     // --- UPDATED: userId type is String, and column name matches the FK ---
     @Column(name = "user_fk_id", nullable = false, length = 11) // Matches public.users.id (varchar(11))
@@ -68,7 +68,7 @@ public class ApiKey {
 
     @Column(name = "rate_limit_tier", length = 50)
     private String rateLimitTier;
-
+    
     @Column(name = "scopes", columnDefinition = "TEXT")
     private String scopes; // Comma-separated list of granted permissions/scopes
     

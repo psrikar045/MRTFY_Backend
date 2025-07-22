@@ -8,6 +8,7 @@ import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.User; // Import User entity
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.UserRepository; // Import UserRepository
+import com.example.jwtauthenticator.util.ApiKeyHashUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,8 +17,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,20 +24,17 @@ public class ApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository; // Inject UserRepository to fetch User by String ID
-    private static final SecureRandom secureRandom = new SecureRandom();
-    private static final Base64.Encoder base64Encoder = Base64.getUrlEncoder().withoutPadding();
+    private final ApiKeyHashUtil apiKeyHashUtil;
 
     @Autowired
-    public ApiKeyService(ApiKeyRepository apiKeyRepository, UserRepository userRepository) {
+    public ApiKeyService(ApiKeyRepository apiKeyRepository, UserRepository userRepository, ApiKeyHashUtil apiKeyHashUtil) {
         this.apiKeyRepository = apiKeyRepository;
         this.userRepository = userRepository; // Initialize UserRepository
+        this.apiKeyHashUtil = apiKeyHashUtil;
     }
 
     private String generateSecureApiKey(String prefix) {
-        byte[] randomBytes = new byte[24];
-        secureRandom.nextBytes(randomBytes);
-        String keySuffix = base64Encoder.encodeToString(randomBytes);
-        return (prefix != null && !prefix.isEmpty() ? prefix : "sk-") + keySuffix;
+        return this.apiKeyHashUtil.generateSecureApiKey(prefix);
     }
 
     @Transactional
@@ -48,13 +44,14 @@ public class ApiKeyService {
                       .orElseThrow(() -> new IllegalArgumentException("User with ID " + userFkId + " not found."));
 
         String generatedKeyValue = generateSecureApiKey(request.getPrefix());
+        String keyHash = apiKeyHashUtil.hashApiKey(generatedKeyValue); // Hash the key for storage
 
         ApiKey apiKey = ApiKey.builder()
                 .userFkId(userFkId) // Set the String user ID
+                .keyHash(keyHash) // Store the hash instead of plain key
                 .name(request.getName())
                 .description(request.getDescription())
                 .prefix(request.getPrefix())
-                .keyValue(generatedKeyValue)
                 .isActive(true)
                 .expiresAt(request.getExpiresAt())
                 .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
@@ -134,20 +131,39 @@ public class ApiKeyService {
     }
 
     /**
-     * Core validation method for incoming API calls.
+     * Core validation method for incoming API calls using key hash.
      * This will be used in your API key authentication filter.
      */
-    @Transactional
-    public Optional<ApiKey> validateApiKey(String keyValue) {
-        return apiKeyRepository.findByKeyValue(keyValue)
+    @Transactional(readOnly = true)
+    public Optional<ApiKey> validateApiKey(String plainTextKey) {
+        if (!apiKeyHashUtil.isValidApiKeyFormat(plainTextKey)) {
+            return Optional.empty();
+        }
+        
+        String keyHash = apiKeyHashUtil.hashApiKey(plainTextKey);
+        return apiKeyRepository.findByKeyHash(keyHash)
                 .filter(ApiKey::isActive)
-                .filter(key -> key.getExpiresAt() == null || key.getExpiresAt().isAfter(LocalDateTime.now()))
-                .map(key -> {
-                    // Update last used timestamp
-                    key.setLastUsedAt(LocalDateTime.now());
-                    apiKeyRepository.save(key);
-                    return key;
-                });
+                .filter(key -> key.getRevokedAt() == null)
+                .filter(key -> key.getExpiresAt() == null || key.getExpiresAt().isAfter(LocalDateTime.now()));
+    }
+    
+    /**
+     * Find API key by key hash.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ApiKey> findByKeyHash(String keyHash) {
+        return apiKeyRepository.findByKeyHash(keyHash);
+    }
+    
+    /**
+     * Update last used timestamp for an API key.
+     */
+    @Transactional
+    public void updateLastUsed(UUID keyId) {
+        apiKeyRepository.findById(keyId).ifPresent(key -> {
+            key.setLastUsedAt(LocalDateTime.now());
+            apiKeyRepository.save(key);
+        });
     }
 
     /**

@@ -42,6 +42,17 @@ public class EmailService {
     private String baseUrl;
 
     public void sendEmail(String to, String subject, String text) {
+        // Validate inputs
+        if (to == null || to.trim().isEmpty()) {
+            throw new IllegalArgumentException("Email address cannot be null or empty");
+        }
+        if (subject == null || subject.trim().isEmpty()) {
+            throw new IllegalArgumentException("Subject cannot be null or empty");
+        }
+        if (text == null || text.trim().isEmpty()) {
+            throw new IllegalArgumentException("Email body cannot be null or empty");
+        }
+        
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);
@@ -57,6 +68,17 @@ public class EmailService {
     }
     
     public void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
+        // Validate inputs
+        if (to == null || to.trim().isEmpty()) {
+            throw new IllegalArgumentException("Email address cannot be null or empty");
+        }
+        if (subject == null || subject.trim().isEmpty()) {
+            throw new IllegalArgumentException("Subject cannot be null or empty");
+        }
+        if (htmlContent == null || htmlContent.trim().isEmpty()) {
+            throw new IllegalArgumentException("HTML content cannot be null or empty");
+        }
+        
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -71,6 +93,44 @@ public class EmailService {
         } catch (Exception e) {
             logger.error("Failed to send HTML email to: {}", to, e);
             throw e; // Rethrow so the calling method can handle it
+        }
+    }
+    
+    public void sendEmailWithTemplate(String to, String subject, String templateName, Map<String, Object> model) {
+        // Validate inputs
+        if (to == null || to.trim().isEmpty()) {
+            throw new IllegalArgumentException("Email address cannot be null or empty");
+        }
+        if (subject == null || subject.trim().isEmpty()) {
+            throw new IllegalArgumentException("Subject cannot be null or empty");
+        }
+        if (templateName == null || templateName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Template name cannot be null or empty");
+        }
+        if (model == null) {
+            model = new HashMap<>();
+        }
+        
+        try {
+            Configuration configuration = freeMarkerConfigurer.getConfiguration();
+            Template template = configuration.getTemplate(templateName + ".ftl");
+            
+            String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
+            
+            sendHtmlEmail(to, subject, emailContent);
+            logger.info("Template email sent successfully to: {} using template: {}", to, templateName);
+        } catch (IOException e) {
+            logger.error("Template not found: {} for email to: {}", templateName, to, e);
+            throw new RuntimeException("Failed to send email with template: " + templateName, e);
+        } catch (TemplateException e) {
+            logger.error("Template processing error for template: {} and email to: {}", templateName, to, e);
+            throw new RuntimeException("Failed to send email with template: " + templateName, e);
+        } catch (MessagingException e) {
+            logger.error("Messaging error when sending template email to: {} using template: {}", to, templateName, e);
+            throw new RuntimeException("Failed to send email with template: " + templateName, e);
+        } catch (Exception e) {
+            logger.error("Unexpected error when sending template email to: {} using template: {}", to, templateName, e);
+            throw new RuntimeException("Failed to send email with template: " + templateName, e);
         }
     }
     
@@ -299,6 +359,138 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             """.formatted(username, resetUrl);
             
         sendEmail(to, subject, emailBody);
+    }
+    
+    public void sendTwoFactorAuthEmail(String to, String username, String tfaCode) {
+        logger.info("Sending 2FA code email to: {}", to);
+        try {
+            Map<String, Object> model = new HashMap<>();
+            model.put("username", username);
+            model.put("tfaCode", tfaCode);
+            model.put("baseUrl", baseUrl);
+            
+            Configuration configuration = freeMarkerConfigurer.getConfiguration();
+            Template template = configuration.getTemplate("2fa-code-email.ftl");
+            
+            String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
+            
+            sendHtmlEmail(to, "Your Two-Factor Authentication Code", emailContent);
+            logger.info("2FA code email sent successfully to: {}", to);
+        } catch (IOException e) {
+            logger.error("Template error when sending 2FA code email to {}: {}", to, e.getMessage());
+            sendFallback2FAEmail(to, username, tfaCode);
+        } catch (TemplateException e) {
+            logger.error("Template processing error when sending 2FA code email to {}: {}", to, e.getMessage());
+            sendFallback2FAEmail(to, username, tfaCode);
+        } catch (MessagingException e) {
+            logger.error("Messaging error when sending 2FA code email to {}: {}", to, e.getMessage());
+            sendFallback2FAEmail(to, username, tfaCode);
+        } catch (Exception e) {
+            logger.error("Unexpected error when sending 2FA code email to {}: {}", to, e.getMessage());
+            sendFallback2FAEmail(to, username, tfaCode);
+        }
+    }
+    
+    private void sendFallback2FAEmail(String to, String username, String tfaCode) {
+        logger.info("Sending fallback plain text 2FA code email to: {}", to);
+        String subject = "Your Two-Factor Authentication Code";
+        
+        String emailBody = """
+            Hello %s,
+            
+            Your two-factor authentication code is: %s
+            
+            This code will expire in 5 minutes for security reasons.
+            
+            If you didn't request this code, please ignore this email.
+            
+            Best regards,
+            Marketify Team
+            """.formatted(username, tfaCode);
+            
+        sendEmail(to, subject, emailBody);
+    }
+    
+    public void sendNotificationEmail(String to, String username, String subject, String message) {
+        logger.info("Sending notification email to: {}", to);
+        try {
+            Map<String, Object> model = new HashMap<>();
+            model.put("username", username);
+            model.put("message", message);
+            model.put("baseUrl", baseUrl);
+            
+            Configuration configuration = freeMarkerConfigurer.getConfiguration();
+            Template template = configuration.getTemplate("notification-email.ftl");
+            
+            String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
+            
+            sendHtmlEmail(to, subject, emailContent);
+            logger.info("Notification email sent successfully to: {}", to);
+        } catch (IOException e) {
+            logger.error("Template error when sending notification email to {}: {}", to, e.getMessage());
+            sendFallbackNotificationEmail(to, username, subject, message);
+        } catch (TemplateException e) {
+            logger.error("Template processing error when sending notification email to {}: {}", to, e.getMessage());
+            sendFallbackNotificationEmail(to, username, subject, message);
+        } catch (MessagingException e) {
+            logger.error("Messaging error when sending notification email to {}: {}", to, e.getMessage());
+            sendFallbackNotificationEmail(to, username, subject, message);
+        } catch (Exception e) {
+            logger.error("Unexpected error when sending notification email to {}: {}", to, e.getMessage());
+            sendFallbackNotificationEmail(to, username, subject, message);
+        }
+    }
+    
+    private void sendFallbackNotificationEmail(String to, String username, String subject, String message) {
+        logger.info("Sending fallback plain text notification email to: {}", to);
+        
+        String emailBody = """
+            Hello %s,
+            
+            %s
+            
+            Best regards,
+            Marketify Team
+            """.formatted(username, message);
+            
+        sendEmail(to, subject, emailBody);
+    }
+    
+    public boolean validateEmailAddress(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Basic email validation regex
+        String emailRegex = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+        return email.matches(emailRegex);
+    }
+    
+    /**
+     * Send bulk emails to multiple recipients
+     * @param recipients Array of email addresses
+     * @param subject Email subject
+     * @param text Email body
+     */
+    public void sendBulkEmail(String[] recipients, String subject, String text) {
+        if (recipients == null || recipients.length == 0) {
+            throw new IllegalArgumentException("Recipients list cannot be empty");
+        }
+        
+        for (String recipient : recipients) {
+            if (recipient != null && !recipient.trim().isEmpty()) {
+                sendEmail(recipient, subject, text);
+            }
+        }
+        logger.info("Bulk email sent to {} recipients", recipients.length);
+    }
+    
+    /**
+     * Check if email service is enabled and configured
+     * @return true if email service is enabled, false otherwise
+     */
+    public boolean isEmailServiceEnabled() {
+        return mailSender != null && fromEmail != null && !fromEmail.trim().isEmpty();
     }
     
     /**

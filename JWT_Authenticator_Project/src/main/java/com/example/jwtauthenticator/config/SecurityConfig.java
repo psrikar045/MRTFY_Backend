@@ -2,6 +2,7 @@ package com.example.jwtauthenticator.config;
 
 import com.example.jwtauthenticator.security.JwtRequestFilter;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
+import com.example.jwtauthenticator.security.ApiKeyAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,14 +30,17 @@ public class SecurityConfig {
     private final JwtUserDetailsService jwtUserDetailsService;
     private final PasswordEncoder passwordEncoder;
     private final JwtRequestFilter jwtRequestFilter;
+    private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
     
     @Autowired
     private AppConfig appConfig;
 
-    public SecurityConfig(JwtUserDetailsService jwtUserDetailsService, PasswordEncoder passwordEncoder, JwtRequestFilter jwtRequestFilter) {
+    public SecurityConfig(JwtUserDetailsService jwtUserDetailsService, PasswordEncoder passwordEncoder, 
+                         JwtRequestFilter jwtRequestFilter, ApiKeyAuthenticationFilter apiKeyAuthenticationFilter) {
         this.jwtUserDetailsService = jwtUserDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.jwtRequestFilter = jwtRequestFilter;
+        this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
     }
 
     @Bean
@@ -104,14 +108,18 @@ public class SecurityConfig {
                         // Health check
                         "/actuator/health",
                         "/api/category/hierarchy",
-                        "/api/brands/all"
+                        "/api/brands/all",
+                        
+                        // External API endpoints (will be protected by API key filter)
+                        "/api/external/**"
                         
                     ).permitAll()
                     .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtRequestFilter, ApiKeyAuthenticationFilter.class);
 
         return http.build();
     }

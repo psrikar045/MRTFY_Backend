@@ -62,4 +62,50 @@ public class GoogleTokenVerificationService {
             throw new SecurityException("Invalid Google ID token");
         }
     }
+
+    /**
+     * Validates if the token has a valid JWT format
+     * @param token The token to validate
+     * @return true if the token has valid JWT format, false otherwise
+     */
+    public boolean isValidTokenFormat(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return false;
+        }
+        
+        // JWT tokens have 3 parts separated by dots
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) {
+            return false;
+        }
+        
+        // Each part should not be empty
+        for (String part : parts) {
+            if (part.trim().isEmpty()) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Checks if Google verification is enabled
+     * @return true if Google verification is enabled, false otherwise
+     */
+    public boolean isGoogleVerificationEnabled(String clientId) {
+        return verifier != null && clientId != null && !clientId.trim().isEmpty();
+    }
+
+    /**
+     * Gets Google configuration information
+     * @return Map containing Google configuration details
+     */
+    public java.util.Map<String, Object> getGoogleConfiguration(String clientId) {
+        java.util.Map<String, Object> config = new java.util.HashMap<>();
+        config.put("clientId", clientId);
+        config.put("verificationEnabled", isGoogleVerificationEnabled(clientId));
+        config.put("verifierInitialized", verifier != null);
+        return config;
+    }
 }

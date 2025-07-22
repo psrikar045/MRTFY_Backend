@@ -34,8 +34,10 @@ public class SwaggerConfig {
                         .title("JWT Authenticator & Brand Data API")
                         .version("2.0.0")
                         .description("A comprehensive JWT-based authentication system with brand data extraction, " +
-                                "multi-tenant support, email verification, two-factor authentication, and audit logging. " +
-                                "Now includes automated brand data extraction and storage from websites.")
+                                "multi-tenant support, email verification, two-factor authentication, audit logging, " +
+                                "and advanced API key management. Features include: rate-limited API keys, " +
+                                "scope-based authorization, IP/domain restrictions, and comprehensive admin controls. " +
+                                "Supports both JWT (for web UI) and API key authentication (for external integrations).")
                         .contact(new Contact()
                                 .name("JWT Authenticator Team")
                                 .email("support@jwtauthenticator.com")
@@ -55,9 +57,11 @@ public class SwaggerConfig {
                                 .description("Tomcat Deployment")))
                 .addSecurityItem(new SecurityRequirement()
                         .addList("Bearer Authentication")
+                        .addList("API Key")
                         .addList("X-Brand-Id"))
                 .components(new Components()
                         .addSecuritySchemes("Bearer Authentication", createJWTScheme())
+                        .addSecuritySchemes("API Key", createApiKeyScheme())
                         .addSecuritySchemes("X-Brand-Id", createBrandIdScheme()));
     }
 
@@ -67,6 +71,14 @@ public class SwaggerConfig {
                 .bearerFormat("JWT")
                 .scheme("bearer")
                 .description("Enter JWT Bearer token in the format: Bearer {token}");
+    }
+    
+    private SecurityScheme createApiKeyScheme() {
+        return new SecurityScheme()
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.HEADER)
+                .name("X-API-KEY")
+                .description("API Key for external integrations (e.g., sk-abc123..., biz-def456..., admin-xyz789...)");
     }
     
     private SecurityScheme createBrandIdScheme() {
