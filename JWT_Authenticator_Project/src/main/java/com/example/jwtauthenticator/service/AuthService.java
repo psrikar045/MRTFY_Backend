@@ -176,7 +176,7 @@ public class AuthService {
         return createAuthenticationToken(authenticationRequest);
     }
     
-    public AuthResponse loginUser(String usernameOrEmail, String password) throws Exception {
+    public AuthResponse loginUserWithNameOrEmail(String usernameOrEmail, String password) throws Exception {
         log.info("Login attempt with identifier: {}", usernameOrEmail); 
         try {
             // Check if the input is an email (contains @ symbol)
