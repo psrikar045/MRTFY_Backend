@@ -6,9 +6,12 @@ import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyUpdateRequestDTO;
 import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.User; // Import User entity
+import com.example.jwtauthenticator.enums.ApiKeyScope;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.UserRepository; // Import UserRepository
 import com.example.jwtauthenticator.util.ApiKeyHashUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +23,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class ApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
@@ -39,33 +43,99 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKeyGeneratedResponseDTO createApiKey(String userFkId, ApiKeyCreateRequestDTO request) {
-        // Optional: Validate if the userFkId exists in the User table's 'id' column
-        userRepository.findById(userFkId) // findById uses the PK, which is 'id' (String)
+        // Input validation
+        if (userFkId == null || userFkId.trim().isEmpty()) {
+            throw new IllegalArgumentException("User ID cannot be null or empty");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("API key request cannot be null");
+        }
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("API key name cannot be null or empty");
+        }
+        
+        // Validate if the userFkId exists in the User table's 'id' column
+        User user = userRepository.findById(userFkId) // Use findById for the primary key lookup
                       .orElseThrow(() -> new IllegalArgumentException("User with ID " + userFkId + " not found."));
+      
+        // Check for duplicate API key names for this user
+        if (apiKeyRepository.existsByNameAndUserFkId(request.getName().trim(), userFkId)) {
+            throw new IllegalArgumentException("API key with name '" + request.getName() + "' already exists for this user");
+        }
+        
+        // Check API key limit per user (configurable limit)
+        List<ApiKey> userApiKeys = apiKeyRepository.findByUserFkId(userFkId);
+        int maxApiKeysPerUser = 10; // This could be made configurable
+        if (userApiKeys.size() >= maxApiKeysPerUser) {
+            throw new IllegalArgumentException("Maximum number of API keys (" + maxApiKeysPerUser + ") reached for this user");
+        }
+        
+        // Validate rate limit tier if provided
+        if (request.getRateLimitTier() != null && !request.getRateLimitTier().trim().isEmpty()) {
+            try {
+                RateLimitTier.valueOf(request.getRateLimitTier().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid rate limit tier: " + request.getRateLimitTier() + 
+                    ". Valid values are: BASIC, STANDARD, PREMIUM, ENTERPRISE, UNLIMITED");
+            }
+        }
+        
+        // Validate scopes if provided
+        if (request.getScopes() != null && !request.getScopes().isEmpty()) {
+            for (String scope : request.getScopes()) {
+                if (scope == null || scope.trim().isEmpty()) {
+                    throw new IllegalArgumentException("Scope cannot be null or empty");
+                }
+                try {
+                    ApiKeyScope.valueOf(scope.trim().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("Invalid scope: " + scope + 
+                        ". Please check available scopes in ApiKeyScope enum");
+                }
+            }
+        }
 
         String generatedKeyValue = generateSecureApiKey(request.getPrefix());
         String keyHash = apiKeyHashUtil.hashApiKey(generatedKeyValue); // Hash the key for storage
 
+        // Handle expiration date: if null, set to 1 year from now
+        LocalDateTime expirationDate = request.getExpiresAt();
+        if (expirationDate == null) {
+            expirationDate = LocalDateTime.now().plusYears(1);
+            log.info("No expiration date provided for API key '{}', setting default expiration to: {}", 
+                    request.getName(), expirationDate);
+        }
+
         ApiKey apiKey = ApiKey.builder()
                 .userFkId(userFkId) // Set the String user ID
                 .keyHash(keyHash) // Store the hash instead of plain key
-                .name(request.getName())
+                .name(request.getName().trim())
                 .description(request.getDescription())
                 .prefix(request.getPrefix())
                 .isActive(true)
-                .expiresAt(request.getExpiresAt())
+                .expiresAt(expirationDate) // Use the processed expiration date
                 .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
                 .allowedDomains(request.getAllowedDomains() != null ? String.join(",", request.getAllowedDomains()) : null)
                 .rateLimitTier(request.getRateLimitTier())
+                .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
                 .build();
 
-        ApiKey savedKey = apiKeyRepository.save(apiKey);
-
-        return ApiKeyGeneratedResponseDTO.builder()
-                .id(savedKey.getId())
-                .name(savedKey.getName())
-                .keyValue(generatedKeyValue)
-                .build();
+        try {
+            ApiKey savedKey = apiKeyRepository.save(apiKey);
+            
+            log.info("API key '{}' created successfully for user '{}' with ID: {}", 
+                    savedKey.getName(), userFkId, savedKey.getId());
+            
+            return ApiKeyGeneratedResponseDTO.builder()
+                    .id(savedKey.getId())
+                    .name(savedKey.getName())
+                    .keyValue(generatedKeyValue)
+                    .build();
+        } catch (Exception e) {
+            log.error("Failed to create API key '{}' for user '{}': {}", 
+                     request.getName(), userFkId, e.getMessage(), e);
+            throw new RuntimeException("Failed to create API key: " + e.getMessage(), e);
+        }
     }
 
     @Transactional(readOnly = true)

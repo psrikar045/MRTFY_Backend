@@ -1,7 +1,9 @@
 package com.example.jwtauthenticator.security;
 
+import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,6 +34,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private final JwtUserDetailsService jwtUserDetailsService;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    @Autowired
+    private ApiKeyAuthenticationService apiKeyAuthenticationService;
 
     public JwtRequestFilter(JwtUtil jwtUtil, JwtUserDetailsService jwtUserDetailsService) {
         this.jwtUtil = jwtUtil;
@@ -42,7 +47,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        final String authorizationHeader = request.getHeader("Authorization");
+        // final String authorizationHeader = request.getHeader("Authorization");
         // No longer requiring X-Brand-Id header
         final String brandId = "default"; // Use a default brand ID
         final String requestPath = request.getRequestURI();
@@ -60,48 +65,49 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return;
         }
 
-        // For protected endpoints, check if Authorization header is present and valid
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+        // Try to authenticate using either JWT or API Key
+        AuthenticationResult authResult = authenticateRequest(request);
+        if (!authResult.isSuccess()) {
             sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
-                "Authorization header is missing or invalid", 
-                "Please include a valid Bearer token in the Authorization header");
+                authResult.getErrorMessage(), 
+                "Please provide either a valid Bearer token or API key");
             return;
         }
 
-        String username = null;
-        String jwt = null;
-
-        try {
-            jwt = authorizationHeader.substring(7);
-            username = jwtUtil.extractUsername(jwt);
-        } catch (Exception e) {
-            sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
-                "Invalid JWT token", 
-                "The provided JWT token is malformed or invalid");
-            return;
-        }
+        String username = authResult.getUsername();
+        String userId = authResult.getUserId();
+        String authMethod = authResult.getAuthMethod();
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // No longer validating X-Brand-Id header
-
             try {
                 UserDetails userDetails = this.jwtUserDetailsService.loadUserByUsernameAndBrandId(username, brandId);
 
-                if (jwtUtil.validateToken(jwt, userDetails)) {
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                } else {
-                    sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
-                        "Invalid or expired JWT token", 
-                        "The provided JWT token is invalid or has expired. Please obtain a new token.");
-                    return;
+                // For JWT authentication, validate the token
+                if ("JWT".equals(authMethod)) {
+                    String authHeader = request.getHeader("Authorization");
+                    String jwt = authHeader.substring(7);
+                    
+                    if (!jwtUtil.validateToken(jwt, userDetails)) {
+                        sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
+                            "Invalid or expired JWT token", 
+                            "The provided JWT token is invalid or has expired. Please obtain a new token.");
+                        return;
+                    }
                 }
+                // For API key authentication, we've already validated it in authenticateWithApiKey
+
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+                
+                // Log successful authentication
+                System.out.println("Authentication successful - Method: " + authMethod + ", User: " + username + ", UserId: " + userId);
+                
             } catch (UsernameNotFoundException e) {
                 sendErrorResponse(request, response, HttpStatus.UNAUTHORIZED, 
                     "User not found or not associated with this brand", 
-                    "The user in the JWT token is not found or not associated with the provided brand ID.");
+                    "The user is not found or not associated with the provided brand ID.");
                 return;
             } catch (Exception e) {
                 sendErrorResponse(request, response, HttpStatus.INTERNAL_SERVER_ERROR, 
@@ -225,5 +231,130 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         ));
         
         response.getWriter().write(objectMapper.writeValueAsString(errorDetails));
+    }
+    
+    /**
+     * Authenticate the request using either JWT token or API key
+     */
+    private AuthenticationResult authenticateRequest(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        String apiKeyHeader = request.getHeader("X-API-Key");
+        
+        // Try JWT authentication first
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authenticateWithJWT(authHeader);
+        }
+        
+        // Try API Key authentication from Authorization header (without Bearer prefix)
+        if (authHeader != null && !authHeader.startsWith("Bearer ")) {
+            return authenticateWithApiKey(authHeader, request);
+        }
+        
+        // Try API Key authentication from X-API-Key header
+        if (apiKeyHeader != null && !apiKeyHeader.trim().isEmpty()) {
+            return authenticateWithApiKey(apiKeyHeader, request);
+        }
+        
+        return AuthenticationResult.failed("Missing authentication. Provide either JWT Bearer token or API key");
+    }
+    
+    /**
+     * Authenticate using JWT token
+     */
+    private AuthenticationResult authenticateWithJWT(String authHeader) {
+        try {
+            String token = authHeader.substring(7);
+            String username = jwtUtil.extractUsername(token);
+            String userId = jwtUtil.extractUserId(token);
+            
+            if (username == null || username.trim().isEmpty()) {
+                return AuthenticationResult.failed("Invalid JWT token: missing username");
+            }
+            if (userId == null || userId.trim().isEmpty()) {
+                return AuthenticationResult.failed("Invalid JWT token: missing user ID");
+            }
+            
+            return AuthenticationResult.success(username, userId, "JWT");
+        } catch (Exception e) {
+            return AuthenticationResult.failed("Invalid or expired JWT token");
+        }
+    }
+    
+    /**
+     * Authenticate using API key
+     */
+    private AuthenticationResult authenticateWithApiKey(String apiKeyValue, HttpServletRequest request) {
+        try {
+            ApiKeyAuthenticationService.ApiKeyAuthResult authResult = 
+                apiKeyAuthenticationService.authenticateApiKey(apiKeyValue);
+            
+            if (!authResult.isSuccess()) {
+                return AuthenticationResult.failed(authResult.getErrorMessage());
+            }
+            
+            // // Validate IP restrictions if any
+            // String clientIp = getClientIpAddress(request);
+            // if (!apiKeyAuthenticationService.validateIpRestriction(authResult.getApiKey(), clientIp)) {
+            //     return AuthenticationResult.failed("IP address not allowed for this API key");
+            // }
+            
+            // Get username from user entity
+            String username = authResult.getUser().getUsername();
+            String userId = authResult.getUserId();
+            
+            return AuthenticationResult.success(username, userId, "API_KEY");
+        } catch (Exception e) {
+            return AuthenticationResult.failed("API key authentication failed");
+        }
+    }
+    
+    /**
+     * Extract client IP address from request
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
+    }
+    
+    /**
+     * Authentication result helper class
+     */
+    private static class AuthenticationResult {
+        private final boolean success;
+        private final String username;
+        private final String userId;
+        private final String authMethod;
+        private final String errorMessage;
+        
+        private AuthenticationResult(boolean success, String username, String userId, String authMethod, String errorMessage) {
+            this.success = success;
+            this.username = username;
+            this.userId = userId;
+            this.authMethod = authMethod;
+            this.errorMessage = errorMessage;
+        }
+        
+        public static AuthenticationResult success(String username, String userId, String authMethod) {
+            return new AuthenticationResult(true, username, userId, authMethod, null);
+        }
+        
+        public static AuthenticationResult failed(String errorMessage) {
+            return new AuthenticationResult(false, null, null, null, errorMessage);
+        }
+        
+        public boolean isSuccess() { return success; }
+        public String getUsername() { return username; }
+        public String getUserId() { return userId; }
+        public String getAuthMethod() { return authMethod; }
+        public String getErrorMessage() { return errorMessage; }
     }
 }

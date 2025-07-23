@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ForwardService {
 
-    private static final String EXTERNAL_API ="https://sumnode-main.onrender.com/api/extract-company-details";
+    private static final String EXTERNAL_API ="http://202.65.155.117:3000/api/extract-company-details";
     private final WebClient forwardWebClient;
     private final Cache<String, String> forwardCache;
     private final ForwardConfig forwardConfig;

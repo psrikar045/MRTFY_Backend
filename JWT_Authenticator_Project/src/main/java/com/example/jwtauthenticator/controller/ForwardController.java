@@ -2,6 +2,7 @@ package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.dto.ForwardRequest;
 import com.example.jwtauthenticator.dto.BrandExtractionResponse;
+import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.util.JwtUtil;
@@ -46,6 +47,7 @@ public class ForwardController {
     private final RateLimiterService rateLimiterService;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final ApiKeyAuthenticationService apiKeyAuthenticationService;
 
     @PostMapping
     @Operation(
@@ -55,10 +57,17 @@ public class ForwardController {
         parameters = {
             @Parameter(
                 name = "Authorization", 
-                description = "JWT Bearer token", 
+                description = "JWT Bearer token OR API Key", 
                 required = true, 
                 in = ParameterIn.HEADER,
-                example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... OR sk-1234567890abcdef..."
+            ),
+            @Parameter(
+                name = "X-API-Key", 
+                description = "Alternative API Key authentication (if not using Authorization header)", 
+                required = false, 
+                in = ParameterIn.HEADER,
+                example = "sk-1234567890abcdef..."
             )
         }
     )
@@ -69,7 +78,7 @@ public class ForwardController {
             content = @Content(schema = @Schema(implementation = BrandExtractionResponse.class))
         ),
         @ApiResponse(responseCode = "400", description = "Bad Request - Invalid URL or missing required headers"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing JWT token"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing JWT token or API key"),
         @ApiResponse(responseCode = "429", description = "Too Many Requests - Rate limit exceeded"),
         @ApiResponse(responseCode = "500", description = "Internal Server Error"),
         @ApiResponse(responseCode = "504", description = "Gateway Timeout - External API timed out")
@@ -79,18 +88,36 @@ public class ForwardController {
             @Valid @RequestBody ForwardRequest request, 
             HttpServletRequest httpRequest) {
         long start = System.currentTimeMillis();
+        
+        // Get user ID from JWT token (authentication already handled by security filter)
         String authHeader = httpRequest.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return buildError("Invalid or missing JWT token", HttpStatus.UNAUTHORIZED);
-        }
-        String token = authHeader.substring(7);
         String userId;
+        String authMethod = "JWT"; // Default to JWT
+        
         try {
-            userId = jwtUtil.extractUserId(token);
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                // JWT authentication
+                String token = authHeader.substring(7);
+                userId = jwtUtil.extractUserId(token);
+                authMethod = "JWT";
+            } else {
+                // API Key authentication - extract user ID from API key
+                String apiKeyValue = authHeader != null ? authHeader : httpRequest.getHeader("X-API-Key");
+                ApiKeyAuthenticationService.ApiKeyAuthResult authResult = 
+                    apiKeyAuthenticationService.authenticateApiKey(apiKeyValue);
+                
+                if (!authResult.isSuccess()) {
+                    return buildError("Authentication failed", HttpStatus.UNAUTHORIZED);
+                }
+                
+                userId = authResult.getUserId();
+                authMethod = "API_KEY";
+            }
         } catch (Exception e) {
-            return buildError("Invalid or missing JWT token", HttpStatus.UNAUTHORIZED);
+            return buildError("Invalid authentication", HttpStatus.UNAUTHORIZED);
         }
 
+        // Apply rate limiting
         ConsumptionProbe probe = rateLimiterService.consume(userId);
         if (!probe.isConsumed()) {
             long waitSeconds = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
@@ -104,7 +131,8 @@ public class ForwardController {
         try {
             CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
             ResponseEntity<String> extResponse = future.get();
-            log.info("userId={} | url={} | status={} | duration={}ms", userId, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);
+            log.info("userId={} | authMethod={} | url={} | status={} | duration={}ms", 
+                    userId, authMethod, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);
             
             if (extResponse.getStatusCode().is2xxSuccessful()) {
                 // Parse the response into BrandExtractionResponse object
@@ -119,13 +147,15 @@ public class ForwardController {
             return ResponseEntity.status(extResponse.getStatusCode())
                     .body(buildErrorMap("External API error: " + extResponse.getBody(), extResponse.getStatusCode()));
         } catch (Exception e) {
-            log.error("userId={} | url={} | error={}", userId, request.url(), e.getMessage());
+            log.error("userId={} | authMethod={} | url={} | error={}", userId, authMethod, request.url(), e.getMessage());
             if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
                 return buildError("External API timed out after " + forwardService.getForwardConfig().getTimeoutSeconds() + " seconds", HttpStatus.GATEWAY_TIMEOUT);
             }
             return buildError("External API error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+
 
     private ResponseEntity<Map<String, Object>> buildError(String message, HttpStatus status) {
         return ResponseEntity.status(status).body(buildErrorMap(message, status));
@@ -138,4 +168,5 @@ public class ForwardController {
         body.put("timestamp", Instant.now().toString());
         return body;
     }
+
 }

@@ -4,7 +4,10 @@ import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
 import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyUpdateRequestDTO;
+import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.service.ApiKeyService;
+import com.example.jwtauthenticator.util.JwtUtil;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,8 +23,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails; // Or your custom UserDetails implementation
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping; // For revoke, if you prefer PATCH
@@ -32,7 +39,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -43,29 +52,55 @@ import java.util.UUID;
 public class ApiKeyController {
 
     private final ApiKeyService apiKeyService;
+    private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
     /**
      * Helper method to get the current authenticated user's 'id' (String) from Spring Security.
-     * YOU MUST CUSTOMIZE THIS METHOD based on your UserDetails implementation.
+     * Extracts the user ID from JWT token claims via the SecurityContext.
      *
      * @param userDetails The authenticated UserDetails object provided by Spring Security.
      * @return The String ID of the authenticated user.
-     * @throws IllegalStateException if the user ID cannot be extracted (e.g., not logged in).
+     * @throws IllegalStateException if the user ID cannot be extracted.
      */
     private String getCurrentUserId(@AuthenticationPrincipal UserDetails userDetails) {
-        // --- CUSTOMIZATION POINT ---
-        // Replace this with your actual logic to extract the String 'id'
-        // from your UserDetails implementation.
-        // Example if CustomUserDetails has a getId() method:
-        // if (userDetails instanceof CustomUserDetails customUserDetails) {
-        //     return customUserDetails.getId();
-        // }
-        // If your UserDetails implementation's getUsername() method returns the user's 'id' (String):
-        log.debug("Attempting to get current user ID from UserDetails.getUsername()");
-        return userDetails.getUsername();
-        // If you can't get it, throw an exception or handle accordingly:
-        // throw new IllegalStateException("Authenticated user ID not found in principal.");
-        // --- END CUSTOMIZATION POINT ---
+        try {
+            // Get the JWT token from the SecurityContext
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null) {
+                throw new IllegalStateException("No authentication found in SecurityContext");
+            }
+            
+            // Extract JWT token from the request
+            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            String authHeader = request.getHeader("Authorization");
+            
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                throw new IllegalStateException("No valid JWT token found in Authorization header");
+            }
+            
+            String jwt = authHeader.substring(7);
+            String userId = jwtUtil.extractUserID(jwt);
+            
+            if (userId == null || userId.trim().isEmpty()) {
+                // Fallback: try to find user by username
+                log.warn("User ID not found in JWT claims, attempting to find by username: {}", userDetails.getUsername());
+                Optional<User> user = userRepository.findByUsername(userDetails.getUsername());
+                if (user.isPresent()) {
+                    userId = user.get().getId();
+                    log.info("Found user ID {} for username {}", userId, userDetails.getUsername());
+                } else {
+                    throw new IllegalStateException("User ID not found in JWT claims and user not found by username: " + userDetails.getUsername());
+                }
+            }
+            
+            log.debug("Successfully extracted user ID: {} for username: {}", userId, userDetails.getUsername());
+            return userId;
+            
+        } catch (Exception e) {
+            log.error("Failed to extract user ID from authentication context: {}", e.getMessage(), e);
+            throw new IllegalStateException("Failed to extract user ID: " + e.getMessage(), e);
+        }
     }
 
 

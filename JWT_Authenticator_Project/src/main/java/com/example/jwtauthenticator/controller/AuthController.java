@@ -1,5 +1,36 @@
 package com.example.jwtauthenticator.controller;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
+import com.example.jwtauthenticator.dto.BrandInfoResponse;
+import com.example.jwtauthenticator.dto.CheckEmailRequest;
+import com.example.jwtauthenticator.dto.CheckUsernameRequest;
+import com.example.jwtauthenticator.dto.ForgotPasswordRequest;
+import com.example.jwtauthenticator.dto.GoogleSignInRequest;
+import com.example.jwtauthenticator.dto.ProfileUpdateRequest;
+import com.example.jwtauthenticator.dto.PublicForwardRequest;
+import com.example.jwtauthenticator.dto.RegisterResponse;
+import com.example.jwtauthenticator.dto.ResetPasswordConfirmRequest;
+import com.example.jwtauthenticator.dto.SetNewPasswordRequest;
+import com.example.jwtauthenticator.dto.SimpleCheckUsernameRequest;
+import com.example.jwtauthenticator.dto.TfaRequest;
+import com.example.jwtauthenticator.dto.VerifyCodeRequest;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
 import com.example.jwtauthenticator.model.EmailLoginRequest;
@@ -12,35 +43,21 @@ import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.PasswordResetService;
 import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.service.TfaService;
-import com.example.jwtauthenticator.repository.UserRepository;
-import com.example.jwtauthenticator.dto.*;
-import com.example.jwtauthenticator.dto.BrandInfoResponse;
 import com.example.jwtauthenticator.util.JwtUtil;
+
+import io.github.bucket4j.ConsumptionProbe;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.enums.ParameterIn;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
-import io.github.bucket4j.ConsumptionProbe;
-
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")

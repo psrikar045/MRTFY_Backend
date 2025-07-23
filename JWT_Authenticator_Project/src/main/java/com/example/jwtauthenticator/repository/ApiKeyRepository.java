@@ -30,4 +30,12 @@ public interface ApiKeyRepository extends JpaRepository<ApiKey, UUID> {
     Optional<ApiKey> findByIdAndUserFkId(UUID id, String userFkId);
 
     Boolean existsByKeyHash(String keyHash);
+    
+    /**
+     * Check if an API key with the given name already exists for a specific user.
+     * @param name The name of the API key to check.
+     * @param userFkId The String 'id' of the user.
+     * @return true if an API key with this name exists for the user, false otherwise.
+     */
+    Boolean existsByNameAndUserFkId(String name, String userFkId);
 }
