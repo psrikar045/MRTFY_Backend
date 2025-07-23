@@ -222,7 +222,7 @@ public class BrandExtractionService {
         if (response.getColors() != null) {
             response.getColors().forEach(colorData -> {
                 BrandColor color = BrandColor.builder()
-                        .hexCode(colorData.getHex())
+                        .hexCode(colorData.getHex() != null ? colorData.getHex() :"#e94848ff")
                         .rgbValue(colorData.getRgb())
                         .brightness(colorData.getBrightness())
                         .colorName(colorData.getName())
