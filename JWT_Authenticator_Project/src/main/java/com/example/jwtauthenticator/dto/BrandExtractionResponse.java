@@ -55,6 +55,11 @@ public class BrandExtractionResponse {
         private String rgb;
         private Integer brightness;
         private String name;
+        
+        // Fields for image-based color objects (logo/banner colors)
+        private Integer width;
+        private Integer height;
+        private List<String> colors;
     }
     
     @Data

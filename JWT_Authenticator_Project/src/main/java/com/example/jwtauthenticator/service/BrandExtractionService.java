@@ -13,6 +13,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -220,17 +222,111 @@ public class BrandExtractionService {
     
     private void addBrandColors(Brand brand, BrandExtractionResponse response) {
         if (response.getColors() != null) {
+            // Separate direct colors from image-based colors
+            List<BrandExtractionResponse.ColorData> directColors = new ArrayList<>();
+            List<BrandExtractionResponse.ColorData> imageBasedColors = new ArrayList<>();
+            
             response.getColors().forEach(colorData -> {
+                if (colorData.getHex() != null) {
+                    directColors.add(colorData);
+                } else if (colorData.getWidth() != null && colorData.getHeight() != null) {
+                    imageBasedColors.add(colorData);
+                }
+            });
+            
+            // Process direct colors (with hex codes)
+            directColors.forEach(colorData -> {
                 BrandColor color = BrandColor.builder()
-                        .hexCode(colorData.getHex() != null ? colorData.getHex() :"#e94848ff")
+                        .hexCode(colorData.getHex())
                         .rgbValue(colorData.getRgb())
                         .brightness(colorData.getBrightness())
                         .colorName(colorData.getName())
-                        .usageContext(colorData.getName()) // Using name as usage context
+                        .usageContext(colorData.getName())
                         .build();
                 brand.addColor(color);
             });
+            
+            // Process image-based colors (logo and banner) - create single objects
+            if (!imageBasedColors.isEmpty()) {
+                // Find the object with maximum width (banner colors)
+                BrandExtractionResponse.ColorData bannerColorData = imageBasedColors.stream()
+                        .max((c1, c2) -> Integer.compare(c1.getWidth(), c2.getWidth()))
+                        .orElse(null);
+                
+                imageBasedColors.forEach(colorData -> {
+                    if (colorData.getColors() != null && !colorData.getColors().isEmpty()) {
+                        String usageContext = (colorData == bannerColorData) ? "Banner" : "Logo";
+                        
+                        // Concatenate all hex colors with comma separator
+                        String concatenatedHex = String.join(",", colorData.getColors().stream()
+                                .map(color -> color.startsWith("#") ? color : "#" + color)
+                                .toArray(String[]::new));
+                        
+                        // Calculate average brightness from all colors
+                        int averageBrightness = calculateAverageBrightness(colorData.getColors());
+                        
+                        // Create RGB string for the first color (representative)
+                        String firstColor = colorData.getColors().get(0);
+                        if (!firstColor.startsWith("#")) {
+                            firstColor = "#" + firstColor;
+                        }
+                        String rgbValue = hexToRgb(firstColor);
+                        
+                        BrandColor color = BrandColor.builder()
+                                .hexCode(concatenatedHex)
+                                .rgbValue(rgbValue)
+                                .brightness(averageBrightness)
+                                .colorName(usageContext + " Colors")
+                                .usageContext(usageContext)
+                                .build();
+                        brand.addColor(color);
+                    }
+                });
+            }
         }
+    }
+    
+    private String hexToRgb(String hex) {
+        try {
+            // Remove # if present
+            hex = hex.replace("#", "");
+            
+            int r = Integer.parseInt(hex.substring(0, 2), 16);
+            int g = Integer.parseInt(hex.substring(2, 4), 16);
+            int b = Integer.parseInt(hex.substring(4, 6), 16);
+            
+            return String.format("rgb(%d,%d,%d)", r, g, b);
+        } catch (Exception e) {
+            return "rgb(0,0,0)"; // Default to black if conversion fails
+        }
+    }
+    
+    private int calculateAverageBrightness(List<String> colors) {
+        if (colors == null || colors.isEmpty()) {
+            return 0;
+        }
+        
+        int totalBrightness = 0;
+        int validColors = 0;
+        
+        for (String color : colors) {
+            try {
+                String hex = color.startsWith("#") ? color.substring(1) : color;
+                
+                int r = Integer.parseInt(hex.substring(0, 2), 16);
+                int g = Integer.parseInt(hex.substring(2, 4), 16);
+                int b = Integer.parseInt(hex.substring(4, 6), 16);
+                
+                // Calculate brightness using luminance formula
+                int brightness = (int) (0.299 * r + 0.587 * g + 0.114 * b);
+                totalBrightness += brightness;
+                validColors++;
+            } catch (Exception e) {
+                // Skip invalid colors
+            }
+        }
+        
+        return validColors > 0 ? totalBrightness / validColors : 0;
     }
     
     private void addBrandFonts(Brand brand, BrandExtractionResponse response) {
