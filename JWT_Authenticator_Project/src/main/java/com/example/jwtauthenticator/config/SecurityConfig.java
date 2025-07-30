@@ -127,19 +127,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Allow specific origins for Google Sign-In and frontend
-        configuration.setAllowedOrigins(Arrays.asList(
-            appConfig.getFrontendBaseUrl(), // Centralized frontend URL
-            "http://localhost:3000", // Development fallback
-            "http://localhost:3001", // Development fallback
-            "http://localhost:4200", // Angular application
-            "https://accounts.google.com", // Google Sign-In
-            "http://202.65.155.117"
-        ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Forward-URL", "X-Forwarded-For", "X-API-KEY"));
+        // Allow all origins since JWT authentication handles security
+        configuration.setAllowedOrigins(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("*"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowCredentials(false); // Must be false when using wildcard origins
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

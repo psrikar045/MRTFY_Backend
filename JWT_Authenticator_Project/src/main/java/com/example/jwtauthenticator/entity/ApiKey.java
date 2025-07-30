@@ -143,4 +143,18 @@ public class ApiKey {
         }
     }
     
+    /**
+     * Check if the API key has expired
+     */
+    public boolean isExpired() {
+        return expiresAt != null && expiresAt.isBefore(LocalDateTime.now());
+    }
+    
+    /**
+     * Check if the API key is currently valid (active, not expired, not revoked)
+     */
+    public boolean isValid() {
+        return isActive && !isExpired() && revokedAt == null;
+    }
+    
 }

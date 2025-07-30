@@ -6,7 +6,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 
 /**
  * Utility class for API key hashing and generation operations.
@@ -110,7 +112,7 @@ public class ApiKeyHashUtil {
     }
 
     /**
-     * Validates API key format (basic validation).
+     * Validates API key format (supports custom prefixes).
      * 
      * @param apiKey The API key to validate
      * @return true if the format is valid, false otherwise
@@ -123,11 +125,11 @@ public class ApiKeyHashUtil {
         // Basic format validation: should have a prefix and sufficient length
         boolean hasPrefix = apiKey.contains("-");
         boolean sufficientLength = apiKey.length() >= 20; // Minimum security length
-        boolean hasValidPrefix = apiKey.startsWith("sk-") || 
-                               apiKey.startsWith("admin-") || 
-                               apiKey.startsWith("biz-");
         
-        return hasPrefix && sufficientLength && hasValidPrefix;
+        // Allow any prefix that ends with a dash (more flexible for custom prefixes)
+        boolean hasValidPrefixFormat = hasPrefix && apiKey.indexOf('-') > 0;
+        
+        return hasPrefix && sufficientLength && hasValidPrefixFormat;
     }
 
     /**
@@ -165,8 +167,24 @@ public class ApiKeyHashUtil {
             case "biz-":
                 return "BUSINESS";
             default:
-                return "UNKNOWN";
+                return "CUSTOM"; // Support for custom prefixes
         }
+    }
+
+    /**
+     * Get all supported default prefixes
+     */
+    public List<String> getDefaultPrefixes() {
+        return Arrays.asList(DEFAULT_PREFIX, ADMIN_PREFIX, BUSINESS_PREFIX);
+    }
+
+    /**
+     * Check if a prefix is a default prefix
+     */
+    public boolean isDefaultPrefix(String prefix) {
+        return DEFAULT_PREFIX.equals(prefix) || 
+               ADMIN_PREFIX.equals(prefix) || 
+               BUSINESS_PREFIX.equals(prefix);
     }
 
     /**

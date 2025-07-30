@@ -1,0 +1,183 @@
+# Dynamic Authentication Configuration
+# This configuration allows switching between authentication methods without code changes
+
+app:
+  auth:
+    # Authentication method: 'api_key', 'jwt', 'both', 'jwt_first'
+    # - api_key: Only API key authentication
+    # - jwt: Only JWT authentication  
+    # - both: API key first, then JWT fallback
+    # - jwt_first: JWT first, then API key fallback
+    method: both
+    
+    # Header names for authentication
+    api-key-header: X-API-Key        # Header for API key
+    jwt-header: Authorization        # Header for JWT token
+    
+    # Token prefixes
+    api-key-prefix: ""               # Prefix for API key (empty = no prefix)
+    jwt-prefix: "Bearer "            # Prefix for JWT token
+    
+    # Fallback configuration
+    fallback: true                   # Allow fallback between auth methods
+    
+    # Security settings
+    require-auth: true               # Require authentication for protected endpoints
+    detailed-errors: true            # Include detailed error information
+    
+    # Paths excluded from authentication
+    excluded-paths:
+      - /api/v1/auth/**             # Authentication endpoints
+      - /swagger-ui/**              # Swagger UI
+      - /v3/api-docs/**             # OpenAPI docs
+      - /actuator/**                # Spring Boot Actuator
+      - /favicon.ico                # Favicon
+      - /error                      # Error page
+      - /health                     # Health check
+    
+    # Rate limiting integration
+    rate-limit:
+      enabled: true                 # Enable rate limiting
+      apply-to-jwt: false          # Apply rate limits to JWT users
+      apply-to-api-key: true       # Apply rate limits to API key users
+
+# Environment-specific configurations
+---
+# Development environment
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+app:
+  auth:
+    method: both                    # Allow both methods in development
+    detailed-errors: true           # Show detailed errors for debugging
+    require-auth: false             # Optional auth for easier testing
+
+logging:
+  level:
+    com.example.jwtauthenticator.config.DynamicAuthenticationStrategy: DEBUG
+    com.example.jwtauthenticator.filter.DynamicAuthenticationFilter: DEBUG
+
+---
+# Staging environment  
+spring:
+  config:
+    activate:
+      on-profile: staging
+
+app:
+  auth:
+    method: both                    # Test both methods in staging
+    detailed-errors: true           # Keep detailed errors for debugging
+    require-auth: true              # Require auth in staging
+
+---
+# Production environment
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+app:
+  auth:
+    method: api_key                 # Prefer API key in production
+    detailed-errors: false          # Hide detailed errors in production
+    require-auth: true              # Always require auth in production
+    fallback: false                 # No fallback for security
+
+logging:
+  level:
+    com.example.jwtauthenticator.config.DynamicAuthenticationStrategy: WARN
+    com.example.jwtauthenticator.filter.DynamicAuthenticationFilter: WARN
+
+---
+# API-only environment (for microservices)
+spring:
+  config:
+    activate:
+      on-profile: api-only
+
+app:
+  auth:
+    method: api_key                 # Only API key authentication
+    fallback: false                 # No fallback needed
+    require-auth: true              # Always require auth
+    
+    # Simplified excluded paths for API-only
+    excluded-paths:
+      - /actuator/health            # Only health check
+      - /actuator/info              # Only info endpoint
+
+---
+# JWT-only environment (for web applications)
+spring:
+  config:
+    activate:
+      on-profile: jwt-only
+
+app:
+  auth:
+    method: jwt                     # Only JWT authentication
+    fallback: false                 # No fallback needed
+    require-auth: true              # Always require auth
+    
+    # Extended excluded paths for web apps
+    excluded-paths:
+      - /api/v1/auth/**             # Authentication endpoints
+      - /login                      # Login page
+      - /register                   # Registration page
+      - /forgot-password            # Password reset
+      - /public/**                  # Public resources
+      - /static/**                  # Static resources
+      - /css/**                     # CSS files
+      - /js/**                      # JavaScript files
+      - /images/**                  # Images
+
+---
+# Migration environment (gradual transition)
+spring:
+  config:
+    activate:
+      on-profile: migration
+
+app:
+  auth:
+    method: jwt_first               # Prefer JWT, fallback to API key
+    fallback: true                  # Allow fallback during migration
+    require-auth: true              # Require auth
+    detailed-errors: true           # Help with migration debugging
+
+# Additional migration-specific settings
+migration:
+  api-key:
+    deprecation-warning: true       # Show deprecation warnings
+    sunset-date: "2024-12-31"       # When API keys will be discontinued
+  jwt:
+    encourage-adoption: true        # Encourage JWT adoption
+
+---
+# Testing environment
+spring:
+  config:
+    activate:
+      on-profile: test
+
+app:
+  auth:
+    method: both                    # Test both methods
+    fallback: true                  # Allow fallback for comprehensive testing
+    require-auth: false             # Optional for easier testing
+    detailed-errors: true           # Detailed errors for test debugging
+    
+    # Minimal excluded paths for testing
+    excluded-paths:
+      - /test/**                    # Test endpoints
+      - /actuator/**                # Actuator endpoints
+
+# Test-specific logging
+logging:
+  level:
+    com.example.jwtauthenticator: DEBUG
+    org.springframework.security: DEBUG

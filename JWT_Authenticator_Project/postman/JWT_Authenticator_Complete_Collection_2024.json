@@ -1,0 +1,1537 @@
+{
+	"info": {
+		"_postman_id": "jwt-authenticator-complete-2024",
+		"name": "JWT Authenticator - Complete API Collection 2024",
+		"description": "Complete and comprehensive collection for testing all JWT Authenticator features including authentication, API keys, user management, brands, categories, and more.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "jwt-authenticator-2024"
+	},
+	"item": [
+		{
+			"name": "1. Authentication & User Management",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.id || response.userId) {",
+									"        pm.environment.set('user_id', response.id || response.userId);",
+									"        console.log('User registered with ID:', response.id || response.userId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Generate Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('access_token', response.token || response.accessToken);",
+									"    pm.environment.set('refresh_token', response.refreshToken);",
+									"    pm.environment.set('user_id', response.userId);",
+									"    console.log('Token generated successfully');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/token",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "token"]
+						}
+					}
+				},
+				{
+					"name": "Login (Username or Email)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('access_token', response.token || response.accessToken);",
+									"    pm.environment.set('refresh_token', response.refreshToken);",
+									"    pm.environment.set('user_id', response.userId);",
+									"    console.log('Login successful');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Login with Username",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login/username",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login", "username"]
+						}
+					}
+				},
+				{
+					"name": "Login with Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login/email",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login", "email"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "\"{{refresh_token}}\""
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Google Sign-In",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"idToken\": \"{{google_id_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/google",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "google"]
+						}
+					}
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"email\": \"{{test_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "forgot-password"]
+						}
+					}
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"{{reset_token}}\",\n    \"newPassword\": \"{{new_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "reset-password"]
+						}
+					}
+				},
+				{
+					"name": "Verify Email",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/verify-email?token={{verification_token}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-email"],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{verification_token}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "X-Brand-Id",
+								"value": "{{brand_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"Updated First\",\n    \"lastName\": \"Updated Last\",\n    \"email\": \"{{test_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/profile",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "profile"]
+						}
+					}
+				},
+				{
+					"name": "Check Email Exists",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{test_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/check-email",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "check-email"]
+						}
+					}
+				},
+				{
+					"name": "Check Username Exists",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"brandId\": \"{{brand_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/check-username",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "check-username"]
+						}
+					}
+				},
+				{
+					"name": "Check Username Exists (Simple)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/check-username/simple",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "check-username", "simple"]
+						}
+					}
+				},
+				{
+					"name": "Forward Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Forward-URL",
+								"value": "{{forward_url}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/forward",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "forward"]
+						}
+					}
+				},
+				{
+					"name": "Public Forward Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"url\": \"{{forward_url}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/public-forward",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "public-forward"]
+						}
+					}
+				},
+				{
+					"name": "Forgot Password Code",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"email\": \"{{test_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/forgot-password-code",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "forgot-password-code"]
+						}
+					}
+				},
+				{
+					"name": "Verify Reset Code",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"code\": \"{{reset_code}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/verify-reset-code",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-reset-code"]
+						}
+					}
+				},
+				{
+					"name": "Set New Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"code\": \"{{reset_code}}\",\n    \"newPassword\": \"{{new_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/set-new-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "set-new-password"]
+						}
+					}
+				},
+				{
+					"name": "Username Exists Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/username-exists?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "username-exists"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Two-Factor Authentication (2FA)",
+			"item": [
+				{
+					"name": "Setup 2FA",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/setup?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "setup"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Verify 2FA Code",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"code\": \"{{tfa_code}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/verify",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Enable 2FA",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/enable?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "enable"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Disable 2FA",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/disable?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "disable"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get 2FA QR Code",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/qr-code?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "qr-code"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Current TOTP Code",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/tfa/current-code?username={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "tfa", "current-code"],
+							"query": [
+								{
+									"key": "username",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. API Key Management",
+			"item": [
+				{
+					"name": "Create API Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.keyValue || response.apiKey) {",
+									"        pm.environment.set('api_key', response.keyValue || response.apiKey);",
+									"        pm.environment.set('api_key_id', response.id || response.keyId);",
+									"        console.log('API Key created:', response.keyValue || response.apiKey);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test API Key\",\n    \"description\": \"API key for testing purposes\",\n    \"scopes\": [\"read\", \"write\"],\n    \"expiresInDays\": 30\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Get My API Keys",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Get API Key Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update API Key",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated API Key\",\n    \"description\": \"Updated description\",\n    \"scopes\": [\"read\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Revoke API Key",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}/revoke",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}", "revoke"]
+						}
+					}
+				},
+				{
+					"name": "Delete API Key",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. API Key Analytics & Statistics",
+			"item": [
+				{
+					"name": "Get API Key Analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Get API Key Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/statistics/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "statistics", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Get User API Key Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/statistics/user/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "statistics", "user", "{{user_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5. API Key Add-ons",
+			"item": [
+				{
+					"name": "Get Available Add-ons",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/addons",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "addons"]
+						}
+					}
+				},
+				{
+					"name": "Get API Key Add-ons",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/addons/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "addons", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Add Add-on to API Key",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"addonId\": \"{{addon_id}}\",\n    \"configuration\": {\n        \"setting1\": \"value1\",\n        \"setting2\": \"value2\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/addons/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "addons", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Remove Add-on from API Key",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/addons/{{api_key_id}}/{{addon_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "addons", "{{api_key_id}}", "{{addon_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Admin API Key Management",
+			"item": [
+				{
+					"name": "Get All API Keys (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Get User API Keys (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/api-keys/user/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "api-keys", "user", "{{user_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Revoke API Key (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}/revoke",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "api-keys", "{{api_key_id}}", "revoke"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7. User Management",
+			"item": [
+				{
+					"name": "Get User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users/profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "profile"]
+						}
+					}
+				},
+				{
+					"name": "Update User Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"Updated First\",\n    \"lastName\": \"Updated Last\",\n    \"email\": \"{{test_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "profile"]
+						}
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"currentPassword\": \"{{test_password}}\",\n    \"newPassword\": \"{{new_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/change-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "change-password"]
+						}
+					}
+				},
+				{
+					"name": "Delete User Account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users/account",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "account"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "8. Brand Management",
+			"item": [
+				{
+					"name": "Get All Brands",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/brands/all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "brands", "all"]
+						}
+					}
+				},
+				{
+					"name": "Get Brand Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/brand-info?domain={{domain}}",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "brand-info"],
+							"query": [
+								{
+									"key": "domain",
+									"value": "{{domain}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Brand",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Brand\",\n    \"domain\": \"testbrand.com\",\n    \"description\": \"A test brand for demonstration\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/brands",
+							"host": ["{{base_url}}"],
+							"path": ["api", "brands"]
+						}
+					}
+				},
+				{
+					"name": "Get Brand Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/brands/{{brand_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "brands", "{{brand_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Brand",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Brand Name\",\n    \"domain\": \"updatedbrand.com\",\n    \"description\": \"Updated brand description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/brands/{{brand_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "brands", "{{brand_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Brand",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/brands/{{brand_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "brands", "{{brand_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "9. Category Management",
+			"item": [
+				{
+					"name": "Get Category Hierarchy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/category/hierarchy",
+							"host": ["{{base_url}}"],
+							"path": ["api", "category", "hierarchy"]
+						}
+					}
+				},
+				{
+					"name": "Create Category",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Category\",\n    \"description\": \"A test category\",\n    \"parentId\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/category",
+							"host": ["{{base_url}}"],
+							"path": ["api", "category"]
+						}
+					}
+				},
+				{
+					"name": "Get Category Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/category/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "category", "{{category_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Category",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Category\",\n    \"description\": \"Updated category description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/category/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "category", "{{category_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Category",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/category/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "category", "{{category_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "10. External API Access",
+			"item": [
+				{
+					"name": "External API Call (with API Key)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/external/test",
+							"host": ["{{base_url}}"],
+							"path": ["api", "external", "test"]
+						}
+					}
+				},
+				{
+					"name": "External API POST (with API Key)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"data\": \"test data\",\n    \"message\": \"External API test\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/external/data",
+							"host": ["{{base_url}}"],
+							"path": ["api", "external", "data"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "11. ID Generator",
+			"item": [
+				{
+					"name": "Initialize User ID Sequence",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"startValue\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/id-generator/user-id/init-sequence",
+							"host": ["{{base_url}}"],
+							"path": ["api", "id-generator", "user-id", "init-sequence"]
+						}
+					}
+				},
+				{
+					"name": "Generate User ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/id-generator/user-id/generate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "id-generator", "user-id", "generate"]
+						}
+					}
+				},
+				{
+					"name": "Generate Brand ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/id-generator/brand-id/generate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "id-generator", "brand-id", "generate"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "12. Protected Resources",
+			"item": [
+				{
+					"name": "Get Protected Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/protected",
+							"host": ["{{base_url}}"],
+							"path": ["api", "protected"]
+						}
+					}
+				},
+				{
+					"name": "Get User Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/user-data",
+							"host": ["{{base_url}}"],
+							"path": ["api", "user-data"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "13. Test Endpoints",
+			"item": [
+				{
+					"name": "Hello World (Root)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/hello",
+							"host": ["{{base_url}}"],
+							"path": ["hello"]
+						}
+					}
+				},
+				{
+					"name": "Google Sign-In Demo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/test/google-signin-demo",
+							"host": ["{{base_url}}"],
+							"path": ["test", "google-signin-demo"]
+						}
+					}
+				},
+				{
+					"name": "Public Test",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/test/public",
+							"host": ["{{base_url}}"],
+							"path": ["test", "public"]
+						}
+					}
+				},
+				{
+					"name": "Protected Test",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/test/protected",
+							"host": ["{{base_url}}"],
+							"path": ["test", "protected"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "14. File Upload",
+			"item": [
+				{
+					"name": "Upload Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "description",
+									"value": "Test image upload",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/images/upload",
+							"host": ["{{base_url}}"],
+							"path": ["images", "upload"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "15. Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/actuator/health",
+							"host": ["{{base_url}}"],
+							"path": ["actuator", "health"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://202.65.155.125:8080/myapp",
+			"type": "string"
+		}
+	]
+}

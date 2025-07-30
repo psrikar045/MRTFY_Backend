@@ -1,0 +1,1209 @@
+{
+	"info": {
+		"_postman_id": "jwt-authenticator-complete-updated",
+		"name": "JWT Authenticator - Complete API Collection (Updated)",
+		"description": "Complete collection for testing all JWT Authenticator features including new analytics, IP/Domain restrictions, custom prefixes, and scopes",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "jwt-authenticator-updated"
+	},
+	"item": [
+		{
+			"name": "1. User Management",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('user_id', response.id || response.userId);",
+									"    console.log('User registered with ID:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "User Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.token) {",
+									"        pm.environment.set('jwt_token', response.token);",
+									"        pm.environment.set('user_id', response.userId || response.username);",
+									"        console.log('JWT Token saved:', response.token.substring(0, 20) + '...');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"password\": \"{{test_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Admin Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.token) {",
+									"        pm.environment.set('admin_jwt_token', response.token);",
+									"        pm.environment.set('admin_user_id', response.userId || response.username);",
+									"        console.log('Admin JWT Token saved:', response.token.substring(0, 20) + '...');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. API Key Management - Basic",
+			"item": [
+				{
+					"name": "Create API Key - Default Prefix",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('api_key_id', response.id);",
+									"    pm.environment.set('api_key_value', response.apiKey);",
+									"    console.log('API Key created:', response.apiKey);",
+									"    console.log('API Key ID:', response.id);",
+									"    console.log('Prefix used:', response.prefix || 'sk-');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Basic API Key\",\n    \"description\": \"API key with default prefix\",\n    \"rateLimitTier\": \"BASIC\",\n    \"scopes\": [\"READ\", \"WRITE\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Create API Key - Custom Prefix",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('custom_api_key_id', response.id);",
+									"    pm.environment.set('custom_api_key_value', response.apiKey);",
+									"    console.log('Custom API Key created:', response.apiKey);",
+									"    console.log('Custom prefix used:', response.prefix);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Production API Key\",\n    \"description\": \"API key with custom prefix for production\",\n    \"prefix\": \"prod-\",\n    \"rateLimitTier\": \"PREMIUM\",\n    \"scopes\": [\"READ\", \"WRITE\", \"ADMIN\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Create API Key - With IP Restrictions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('restricted_api_key_id', response.id);",
+									"    pm.environment.set('restricted_api_key_value', response.apiKey);",
+									"    console.log('Restricted API Key created:', response.apiKey);",
+									"    console.log('Allowed IPs:', response.allowedIps);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"IP Restricted API Key\",\n    \"description\": \"API key with IP address restrictions\",\n    \"prefix\": \"secure-\",\n    \"allowedIps\": [\"127.0.0.1\", \"192.168.1.100\"],\n    \"rateLimitTier\": \"STANDARD\",\n    \"scopes\": [\"READ\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Create API Key - With Domain Restrictions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('domain_restricted_api_key_id', response.id);",
+									"    pm.environment.set('domain_restricted_api_key_value', response.apiKey);",
+									"    console.log('Domain Restricted API Key created:', response.apiKey);",
+									"    console.log('Allowed Domains:', response.allowedDomains);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Domain Restricted API Key\",\n    \"description\": \"API key with domain restrictions\",\n    \"prefix\": \"domain-\",\n    \"allowedDomains\": [\"localhost\", \"myapp.com\", \"*.myapp.com\"],\n    \"rateLimitTier\": \"STANDARD\",\n    \"scopes\": [\"READ\", \"WRITE\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Create API Key - Full Featured",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('full_featured_api_key_id', response.id);",
+									"    pm.environment.set('full_featured_api_key_value', response.apiKey);",
+									"    console.log('Full Featured API Key created:', response.apiKey);",
+									"    console.log('All features:', JSON.stringify(response, null, 2));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Enterprise API Key\",\n    \"description\": \"API key with all features enabled\",\n    \"prefix\": \"enterprise-\",\n    \"allowedIps\": [\"127.0.0.1\", \"192.168.1.0/24\"],\n    \"allowedDomains\": [\"localhost\", \"api.mycompany.com\", \"*.mycompany.com\"],\n    \"scopes\": [\"READ\", \"WRITE\", \"DELETE\", \"ADMIN\", \"ANALYTICS\"],\n    \"rateLimitTier\": \"ENTERPRISE\",\n    \"expiresAt\": \"2025-12-31T23:59:59\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Get All My API Keys",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Get Specific API Key",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update API Key",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated API Key Name\",\n    \"description\": \"Updated description\",\n    \"isActive\": true,\n    \"allowedIps\": [\"127.0.0.1\", \"192.168.1.101\"],\n    \"allowedDomains\": [\"localhost\", \"updated.myapp.com\"],\n    \"scopes\": [\"READ\", \"WRITE\", \"ANALYTICS\"],\n    \"rateLimitTier\": \"PREMIUM\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Revoke API Key",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/{{custom_api_key_id}}/revoke",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "{{custom_api_key_id}}", "revoke"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. API Key Usage Testing",
+			"item": [
+				{
+					"name": "Test API Key - Success (Default Prefix)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Log request details for analytics",
+									"console.log('Request made with API Key:', pm.request.headers.get('X-API-Key'));",
+									"console.log('Host header:', pm.request.headers.get('Host'));",
+									"console.log('Response status:', pm.response.code);",
+									"console.log('Response time:', pm.response.responseTime + 'ms');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test API Key - Custom Prefix",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('Testing custom prefix API key');",
+									"console.log('Response status:', pm.response.code);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{custom_api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test IP Restriction - Should Work",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('Testing IP restricted key from allowed IP');",
+									"if (pm.response.code === 200) {",
+									"    console.log('✅ Request allowed - IP restriction working correctly');",
+									"} else {",
+									"    console.log('❌ Request blocked - Check IP configuration');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{restricted_api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							},
+							{
+								"key": "X-Forwarded-For",
+								"value": "127.0.0.1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test IP Restriction - Should Block",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('Testing IP restricted key from blocked IP');",
+									"if (pm.response.code === 403) {",
+									"    console.log('✅ Request blocked - IP restriction working correctly');",
+									"} else if (pm.response.code === 200) {",
+									"    console.log('⚠️ Request allowed - IP validation might be disabled');",
+									"} else {",
+									"    console.log('❓ Unexpected response:', pm.response.code);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{restricted_api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							},
+							{
+								"key": "X-Forwarded-For",
+								"value": "203.0.113.50"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Domain Restriction - Should Work",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('Testing domain restricted key with allowed domain');",
+									"if (pm.response.code === 200) {",
+									"    console.log('✅ Request allowed - Domain restriction working correctly');",
+									"} else {",
+									"    console.log('❌ Request blocked - Check domain configuration');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{domain_restricted_api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Domain Restriction - Should Block",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"console.log('Testing domain restricted key with blocked domain');",
+									"if (pm.response.code === 403) {",
+									"    console.log('✅ Request blocked - Domain restriction working correctly');",
+									"} else if (pm.response.code === 200) {",
+									"    console.log('⚠️ Request allowed - Domain validation might be disabled');",
+									"} else {",
+									"    console.log('❓ Unexpected response:', pm.response.code);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{domain_restricted_api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "unauthorized.com"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Test Invalid API Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 401) {",
+									"    console.log('✅ Invalid API key correctly rejected');",
+									"} else {",
+									"    console.log('❌ Invalid API key not properly handled');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "invalid-key-12345"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Analytics & Monitoring",
+			"item": [
+				{
+					"name": "Get Request Logs",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('Total logs:', response.totalElements);",
+									"    console.log('Current page:', response.currentPage);",
+									"    if (response.logs && response.logs.length > 0) {",
+									"        console.log('Sample log entry:', JSON.stringify(response.logs[0], null, 2));",
+									"        console.log('IP extracted:', response.logs[0].clientIp);",
+									"        console.log('Domain extracted:', response.logs[0].domain);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/{{api_key_id}}/logs?page=0&size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "{{api_key_id}}", "logs"],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Security Violations",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('Total violations:', response.totalViolations);",
+									"    if (response.violations && response.violations.length > 0) {",
+									"        console.log('Sample violation:', JSON.stringify(response.violations[0], null, 2));",
+									"    } else {",
+									"        console.log('No security violations found');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/{{restricted_api_key_id}}/security-violations",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "{{restricted_api_key_id}}", "security-violations"]
+						}
+					}
+				},
+				{
+					"name": "Get Usage Statistics",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('Request count (24h):', response.requestCount);",
+									"    console.log('Security violations:', response.securityViolations);",
+									"    console.log('Top client IPs:', JSON.stringify(response.topClientIps, null, 2));",
+									"    console.log('Top domains:', JSON.stringify(response.topDomains, null, 2));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/{{api_key_id}}/statistics?hours=24",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "{{api_key_id}}", "statistics"],
+							"query": [
+								{
+									"key": "hours",
+									"value": "24"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Geographic Distribution",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/{{api_key_id}}/geographic-distribution?limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "{{api_key_id}}", "geographic-distribution"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5. Rate Limiting Tests",
+			"item": [
+				{
+					"name": "Rate Limit Test - Request 1",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const rateLimitRemaining = pm.response.headers.get('X-RateLimit-Remaining');",
+									"const rateLimitLimit = pm.response.headers.get('X-RateLimit-Limit');",
+									"console.log('Request 1 - Limit:', rateLimitLimit, 'Remaining:', rateLimitRemaining);",
+									"pm.environment.set('remaining_after_1', rateLimitRemaining);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Rate Limit Test - Request 2",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const rateLimitRemaining = pm.response.headers.get('X-RateLimit-Remaining');",
+									"console.log('Request 2 - Remaining:', rateLimitRemaining);",
+									"pm.environment.set('remaining_after_2', rateLimitRemaining);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				},
+				{
+					"name": "Rate Limit Test - Request 3",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const rateLimitRemaining = pm.response.headers.get('X-RateLimit-Remaining');",
+									"console.log('Request 3 - Remaining:', rateLimitRemaining);",
+									"",
+									"if (pm.response.code === 429) {",
+									"    console.log('✅ Rate limit exceeded - Working correctly!');",
+									"} else if (pm.response.code === 200) {",
+									"    console.log('✅ Request allowed - Still within limits');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key_value}}"
+							},
+							{
+								"key": "Host",
+								"value": "localhost"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Admin Operations",
+			"item": [
+				{
+					"name": "Get All API Keys (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/api-keys/all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "api-keys", "all"]
+						}
+					}
+				},
+				{
+					"name": "Get System Statistics (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/admin/api-keys/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "api-keys", "stats"]
+						}
+					}
+				},
+				{
+					"name": "Cleanup Old Logs (Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('Cleanup completed:', response.message);",
+									"    console.log('Days kept:', response.daysKept);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/analytics/cleanup?daysToKeep=30",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", "analytics", "cleanup"],
+							"query": [
+								{
+									"key": "daysToKeep",
+									"value": "30"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7. Error Scenarios",
+			"item": [
+				{
+					"name": "Create API Key - Invalid Prefix",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 400) {",
+									"    console.log('✅ Invalid prefix correctly rejected');",
+									"} else {",
+									"    console.log('❌ Invalid prefix validation not working');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Invalid Prefix Key\",\n    \"description\": \"Testing invalid prefix\",\n    \"prefix\": \"invalid_prefix\",\n    \"rateLimitTier\": \"BASIC\",\n    \"scopes\": [\"READ\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Create API Key - Invalid Scope",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 400) {",
+									"    console.log('✅ Invalid scope correctly rejected');",
+									"} else {",
+									"    console.log('❌ Invalid scope validation not working');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Invalid Scope Key\",\n    \"description\": \"Testing invalid scope\",\n    \"prefix\": \"test-\",\n    \"rateLimitTier\": \"BASIC\",\n    \"scopes\": [\"INVALID_SCOPE\", \"READ\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				},
+				{
+					"name": "Access Without Authentication",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 401) {",
+									"    console.log('✅ Unauthenticated access correctly blocked');",
+									"} else {",
+									"    console.log('❌ Authentication not properly enforced');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"console.log('🚀 Making request to:', pm.request.url.toString());",
+					"",
+					"// Log headers for debugging",
+					"const apiKey = pm.request.headers.get('X-API-Key');",
+					"if (apiKey) {",
+					"    console.log('📋 Using API Key:', apiKey.substring(0, 15) + '...');",
+					"}",
+					"",
+					"const host = pm.request.headers.get('Host');",
+					"if (host) {",
+					"    console.log('🌐 Host header:', host);",
+					"}",
+					"",
+					"const forwardedFor = pm.request.headers.get('X-Forwarded-For');",
+					"if (forwardedFor) {",
+					"    console.log('🔄 X-Forwarded-For:', forwardedFor);",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"console.log('📊 Response status:', pm.response.code);",
+					"console.log('⏱️ Response time:', pm.response.responseTime + 'ms');",
+					"",
+					"// Log rate limit headers if present",
+					"const rateLimitLimit = pm.response.headers.get('X-RateLimit-Limit');",
+					"const rateLimitRemaining = pm.response.headers.get('X-RateLimit-Remaining');",
+					"const rateLimitReset = pm.response.headers.get('X-RateLimit-Reset');",
+					"",
+					"if (rateLimitLimit) {",
+					"    console.log('🚦 Rate Limit - Limit:', rateLimitLimit, 'Remaining:', rateLimitRemaining, 'Reset:', rateLimitReset);",
+					"}",
+					"",
+					"// Log errors for debugging",
+					"if (pm.response.code >= 400) {",
+					"    try {",
+					"        const errorResponse = pm.response.json();",
+					"        console.log('❌ Error response:', JSON.stringify(errorResponse, null, 2));",
+					"    } catch (e) {",
+					"        console.log('❌ Error response (text):', pm.response.text());",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "collection_version",
+			"value": "2.0.0"
+		},
+		{
+			"key": "collection_description",
+			"value": "Complete JWT Authenticator API collection with all new features"
+		}
+	]
+}

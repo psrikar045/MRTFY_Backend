@@ -5,6 +5,7 @@ import com.example.jwtauthenticator.dto.BrandExtractionResponse;
 import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.RateLimiterService;
+import com.example.jwtauthenticator.service.ProfessionalRateLimitService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.ConsumptionProbe;
@@ -45,6 +46,7 @@ public class ForwardController {
 
     private final ForwardService forwardService;
     private final RateLimiterService rateLimiterService;
+    private final ProfessionalRateLimitService professionalRateLimitService;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final ApiKeyAuthenticationService apiKeyAuthenticationService;
@@ -89,9 +91,10 @@ public class ForwardController {
             HttpServletRequest httpRequest) {
         long start = System.currentTimeMillis();
         
-        // Get user ID from JWT token (authentication already handled by security filter)
+        // Get authentication details (authentication already handled by security filter)
         String authHeader = httpRequest.getHeader(HttpHeaders.AUTHORIZATION);
         String userId;
+        String apiKeyId = null;
         String authMethod = "JWT"; // Default to JWT
         
         try {
@@ -100,8 +103,19 @@ public class ForwardController {
                 String token = authHeader.substring(7);
                 userId = jwtUtil.extractUserId(token);
                 authMethod = "JWT";
+                
+                // For JWT, use existing rate limiter
+                ConsumptionProbe probe = rateLimiterService.consume(userId);
+                if (!probe.isConsumed()) {
+                    long waitSeconds = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add("Retry-After", String.valueOf(waitSeconds));
+                    return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                            .headers(headers)
+                            .body(buildErrorMap("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS));
+                }
             } else {
-                // API Key authentication - extract user ID from API key
+                // API Key authentication - use professional rate limiting
                 String apiKeyValue = authHeader != null ? authHeader : httpRequest.getHeader("X-API-Key");
                 ApiKeyAuthenticationService.ApiKeyAuthResult authResult = 
                     apiKeyAuthenticationService.authenticateApiKey(apiKeyValue);
@@ -111,21 +125,42 @@ public class ForwardController {
                 }
                 
                 userId = authResult.getUserId();
+                apiKeyId = authResult.getApiKey().getId().toString();
                 authMethod = "API_KEY";
+                
+                // Apply professional rate limiting for API keys
+                ProfessionalRateLimitService.RateLimitResult rateLimitResult = 
+                    professionalRateLimitService.checkRateLimit(apiKeyId);
+                
+                if (!rateLimitResult.isAllowed()) {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add("X-RateLimit-Limit", String.valueOf(rateLimitResult.getTier() != null ? rateLimitResult.getTier().getRequestLimit() : 0));
+                    headers.add("X-RateLimit-Remaining", String.valueOf(rateLimitResult.getRemainingRequests() != null ? rateLimitResult.getRemainingRequests() : 0));
+                    headers.add("X-RateLimit-Reset", String.valueOf(rateLimitResult.getResetInSeconds() != null ? rateLimitResult.getResetInSeconds() : 0));
+                    headers.add("X-RateLimit-Tier", rateLimitResult.getTier() != null ? rateLimitResult.getTier().name() : "UNKNOWN");
+                    headers.add("X-RateLimit-Additional-Available", String.valueOf(rateLimitResult.getAdditionalRequestsRemaining() != null ? rateLimitResult.getAdditionalRequestsRemaining() : 0));
+                    headers.add("X-RateLimit-Total-Remaining", String.valueOf(rateLimitResult.getTotalRequestsRemaining()));
+                    return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                            .headers(headers)
+                            .body(buildErrorMap(rateLimitResult.getReason(), HttpStatus.TOO_MANY_REQUESTS));
+                }
+                
+                // Add success headers for API key requests
+                HttpHeaders successHeaders = new HttpHeaders();
+                successHeaders.add("X-RateLimit-Limit", String.valueOf(rateLimitResult.getTier().getRequestLimit()));
+                successHeaders.add("X-RateLimit-Remaining", String.valueOf(rateLimitResult.getRemainingRequests()));
+                successHeaders.add("X-RateLimit-Tier", rateLimitResult.getTier().name());
+                successHeaders.add("X-RateLimit-Additional-Available", String.valueOf(rateLimitResult.getAdditionalRequestsRemaining()));
+                successHeaders.add("X-RateLimit-Total-Remaining", String.valueOf(rateLimitResult.getTotalRequestsRemaining()));
+                if (rateLimitResult.isUsedAddOn()) {
+                    successHeaders.add("X-RateLimit-Used-AddOn", "true");
+                }
+                
+                // Store headers for later use in response
+                httpRequest.setAttribute("rateLimitHeaders", successHeaders);
             }
         } catch (Exception e) {
             return buildError("Invalid authentication", HttpStatus.UNAUTHORIZED);
-        }
-
-        // Apply rate limiting
-        ConsumptionProbe probe = rateLimiterService.consume(userId);
-        if (!probe.isConsumed()) {
-            long waitSeconds = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
-            HttpHeaders headers = new HttpHeaders();
-            headers.add("Retry-After", String.valueOf(waitSeconds));
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .headers(headers)
-                    .body(buildErrorMap("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS));
         }
 
         try {

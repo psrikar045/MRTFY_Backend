@@ -1,0 +1,177 @@
+{
+	"id": "jwt-authenticator-env-updated",
+	"name": "JWT Authenticator - Complete Environment (Updated)",
+	"values": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080/myapp",
+			"description": "Base URL for the JWT Authenticator API",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_username",
+			"value": "testuser",
+			"description": "Username for testing regular user operations",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_password",
+			"value": "password123",
+			"description": "Password for testing regular user operations",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_email",
+			"value": "testuser@example.com",
+			"description": "Email for user registration",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_username",
+			"value": "admin",
+			"description": "Username for testing admin operations",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_password",
+			"value": "admin123",
+			"description": "Password for testing admin operations",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"description": "JWT token for regular user authentication (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_jwt_token",
+			"value": "",
+			"description": "JWT token for admin authentication (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"description": "User ID (auto-populated after login)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_user_id",
+			"value": "",
+			"description": "Admin user ID (auto-populated after admin login)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "api_key_id",
+			"value": "",
+			"description": "API Key ID for basic API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "api_key_value",
+			"value": "",
+			"description": "API Key value for basic API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "custom_api_key_id",
+			"value": "",
+			"description": "API Key ID for custom prefix API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "custom_api_key_value",
+			"value": "",
+			"description": "API Key value for custom prefix API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "restricted_api_key_id",
+			"value": "",
+			"description": "API Key ID for IP restricted API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "restricted_api_key_value",
+			"value": "",
+			"description": "API Key value for IP restricted API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "domain_restricted_api_key_id",
+			"value": "",
+			"description": "API Key ID for domain restricted API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "domain_restricted_api_key_value",
+			"value": "",
+			"description": "API Key value for domain restricted API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "full_featured_api_key_id",
+			"value": "",
+			"description": "API Key ID for full featured API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "full_featured_api_key_value",
+			"value": "",
+			"description": "API Key value for full featured API key (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "rate_limit_limit",
+			"value": "",
+			"description": "Rate limit maximum (auto-populated from headers)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "rate_limit_remaining",
+			"value": "",
+			"description": "Rate limit remaining (auto-populated from headers)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "remaining_after_1",
+			"value": "",
+			"description": "Rate limit remaining after first request (auto-populated)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "remaining_after_2",
+			"value": "",
+			"description": "Rate limit remaining after second request (auto-populated)",
+			"type": "default",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment",
+	"_postman_exported_at": "2024-01-15T10:30:00.000Z",
+	"_postman_exported_using": "Postman/10.0.0"
+}

@@ -1,0 +1,139 @@
+# Security Features Configuration Template
+# Copy these settings to your main application.yml and adjust as needed
+
+app:
+  # Dynamic Authentication Configuration
+  auth:
+    method: both                    # api_key, jwt, both, jwt_first
+    api-key-header: X-API-Key       # Header name for API keys
+    jwt-header: Authorization       # Header name for JWT tokens
+    fallback: true                  # Allow fallback between auth methods
+    require-auth: true              # Require authentication
+    detailed-errors: true           # Show detailed error information
+    excluded-paths: /api/v1/auth/**,/swagger-ui/**,/v3/api-docs/**,/actuator/**
+    
+  # Security Features (Disabled by default for backward compatibility)
+  security:
+    ip-validation:
+      enabled: false                # Enable IP address validation
+      log-violations: true          # Log IP restriction violations
+    domain-validation:
+      enabled: false                # Enable domain validation  
+      log-violations: true          # Log domain restriction violations
+    
+  # Analytics and Logging
+  analytics:
+    request-logging:
+      enabled: true                 # Enable request logging
+      log-success: true             # Log successful requests
+      log-failures: true            # Log failed requests
+      log-security-violations: true # Log security violations
+    async-logging: true             # Use async logging for performance
+    retention-days: 90              # Days to keep request logs
+    
+  # Rate Limiting Configuration
+  rate-limiting:
+    enabled: true                   # Enable rate limiting
+    window-type: daily              # daily, hourly, monthly
+    default-tier: BASIC             # Default rate limit tier
+    
+  # Add-on System
+  addons:
+    enabled: true                   # Enable add-on system
+    auto-use: true                  # Automatically use add-ons when base limit exceeded
+    recommendations: true           # Enable usage-based recommendations
+
+# Database Configuration for Request Logs
+spring:
+  jpa:
+    properties:
+      hibernate:
+        # Optimize for analytics queries
+        jdbc:
+          batch_size: 50            # Batch insert for performance
+        order_inserts: true         # Order inserts for better performance
+        order_updates: true         # Order updates for better performance
+        
+# Logging Configuration
+logging:
+  level:
+    com.example.jwtauthenticator.service.ApiKeyRequestLogService: INFO
+    com.example.jwtauthenticator.filter.DynamicAuthenticationFilter: DEBUG
+    com.example.jwtauthenticator.config.DynamicAuthenticationStrategy: DEBUG
+    
+# Async Configuration
+spring:
+  task:
+    execution:
+      pool:
+        core-size: 2                # Core thread pool size for async tasks
+        max-size: 10                # Maximum thread pool size
+        queue-capacity: 100         # Queue capacity for async tasks
+      thread-name-prefix: "async-"  # Thread name prefix
+
+---
+# Production Configuration Profile
+spring:
+  config:
+    activate:
+      on-profile: production
+      
+app:
+  auth:
+    detailed-errors: false          # Hide detailed errors in production
+  security:
+    ip-validation:
+      enabled: true                 # Enable IP validation in production
+    domain-validation:
+      enabled: true                 # Enable domain validation in production
+  analytics:
+    async-logging: true             # Always use async logging in production
+    retention-days: 30              # Shorter retention in production
+
+logging:
+  level:
+    com.example.jwtauthenticator: WARN  # Less verbose logging in production
+
+---
+# Development Configuration Profile  
+spring:
+  config:
+    activate:
+      on-profile: development
+      
+app:
+  auth:
+    detailed-errors: true           # Show detailed errors in development
+  security:
+    ip-validation:
+      enabled: false                # Disable IP validation in development
+    domain-validation:
+      enabled: false                # Disable domain validation in development
+  analytics:
+    retention-days: 7               # Shorter retention in development
+
+logging:
+  level:
+    com.example.jwtauthenticator: DEBUG  # Verbose logging in development
+
+---
+# Testing Configuration Profile
+spring:
+  config:
+    activate:
+      on-profile: test
+      
+app:
+  analytics:
+    request-logging:
+      enabled: false                # Disable logging in tests
+    async-logging: false            # Synchronous logging in tests
+  security:
+    ip-validation:
+      enabled: false                # Disable validations in tests
+    domain-validation:
+      enabled: false
+
+logging:
+  level:
+    com.example.jwtauthenticator: ERROR  # Minimal logging in tests
