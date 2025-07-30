@@ -430,6 +430,110 @@ public class FileStorageService {
     }
     
     /**
+     * Store user profile image
+     * 
+     * @param userId User ID
+     * @param fileContent File content as byte array
+     * @param originalFileName Original filename
+     * @return StorageResult containing stored path and metadata
+     */
+    public StorageResult storeUserProfileImage(String userId, byte[] fileContent, String originalFileName) {
+        try {
+            // Validate inputs
+            if (fileContent == null || fileContent.length == 0) {
+                return StorageResult.failure("Empty file content");
+            }
+            
+            if (fileContent.length > maxFileSize) {
+                return StorageResult.failure("File size exceeds maximum allowed size: " + maxFileSize);
+            }
+            
+            // Generate storage path for user profile image
+            String targetPath = generateUserProfilePath(userId, originalFileName);
+            
+            // Store file based on storage type
+            String storedPath = storeFile(fileContent, targetPath);
+            String mimeType = detectMimeType(originalFileName, fileContent);
+            
+            return StorageResult.success(storedPath, fileContent.length, mimeType);
+            
+        } catch (Exception e) {
+            log.error("Failed to store user profile image for user: {}", userId, e);
+            return StorageResult.failure("Storage failed: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Generate storage path for user profile image
+     */
+    private String generateUserProfilePath(String userId, String originalFileName) {
+        String fileExtension = getFileExtension(originalFileName);
+        String fileName = "profile_" + System.currentTimeMillis() + 
+            (fileExtension != null ? "." + fileExtension : "");
+        return String.format("users/%s/profile/%s", userId, fileName);
+    }
+    
+    /**
+     * Get file extension from filename
+     */
+    private String getFileExtension(String filename) {
+        if (filename == null || filename.lastIndexOf(".") == -1) {
+            return null;
+        }
+        return filename.substring(filename.lastIndexOf(".") + 1);
+    }
+    
+    /**
+     * Handle existing profile image backup
+     */
+    public void backupExistingProfileImage(String userId, String existingPath) {
+        if (existingPath == null || existingPath.trim().isEmpty()) {
+            return;
+        }
+        
+        try {
+            // Extract filename from existing path
+            String existingFileName = extractFileNameFromPath(existingPath);
+            if (existingFileName != null) {
+                Path existingFile = Paths.get(localBasePath, existingPath);
+                if (Files.exists(existingFile)) {
+                    // Create backup filename with timestamp
+                    String timestamp = java.time.LocalDateTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+                    String fileExtension = getFileExtension(existingFileName);
+                    String backupFileName = "backup_" + timestamp + 
+                        (fileExtension != null ? "." + fileExtension : "");
+                    
+                    String backupPath = String.format("users/%s/profile/%s", userId, backupFileName);
+                    Path backupFile = Paths.get(localBasePath, backupPath);
+                    
+                    // Create backup directory if it doesn't exist
+                    Files.createDirectories(backupFile.getParent());
+                    
+                    Files.move(existingFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
+                    log.info("Existing profile image backed up: {} -> {}", existingPath, backupPath);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to backup existing profile image for user {}: {}", userId, e.getMessage());
+        }
+    }
+    
+    /**
+     * Extract filename from path
+     */
+    private String extractFileNameFromPath(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            return null;
+        }
+        int lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex >= 0 && lastSlashIndex < path.length() - 1) {
+            return path.substring(lastSlashIndex + 1);
+        }
+        return path;
+    }
+    
+    /**
      * Result class for download operations
      */
     private static class DownloadResult {
@@ -453,6 +557,39 @@ public class FileStorageService {
         
         public static DownloadResult failure(String errorMessage) {
             return new DownloadResult(false, null, 0, null, errorMessage);
+        }
+        
+        public boolean isSuccess() { return success; }
+        public String getStoredPath() { return storedPath; }
+        public long getFileSize() { return fileSize; }
+        public String getMimeType() { return mimeType; }
+        public String getErrorMessage() { return errorMessage; }
+    }
+    
+    /**
+     * Result class for storage operations
+     */
+    public static class StorageResult {
+        private final boolean success;
+        private final String storedPath;
+        private final long fileSize;
+        private final String mimeType;
+        private final String errorMessage;
+        
+        private StorageResult(boolean success, String storedPath, long fileSize, String mimeType, String errorMessage) {
+            this.success = success;
+            this.storedPath = storedPath;
+            this.fileSize = fileSize;
+            this.mimeType = mimeType;
+            this.errorMessage = errorMessage;
+        }
+        
+        public static StorageResult success(String storedPath, long fileSize, String mimeType) {
+            return new StorageResult(true, storedPath, fileSize, mimeType, null);
+        }
+        
+        public static StorageResult failure(String errorMessage) {
+            return new StorageResult(false, null, 0, null, errorMessage);
         }
         
         public boolean isSuccess() { return success; }

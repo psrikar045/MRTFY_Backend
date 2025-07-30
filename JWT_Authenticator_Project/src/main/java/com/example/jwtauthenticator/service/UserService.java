@@ -5,21 +5,13 @@ import com.example.jwtauthenticator.dto.UserResponseDTO;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,11 +22,8 @@ public class UserService {
 	@Autowired
     private UserRepository userRepository;
     
-    @Value("${app.file-storage.profile.local.base-path:./User_Profile_Images}")
-    private String profileImageBasePath;
-    
-    @Value("${app.file-storage.profile.server.base-url:http://202.65.155.125:8080/images}")
-    private String serverBaseUrl;
+    @Autowired
+    private FileStorageService fileStorageService;
 
     public Optional<UserResponseDTO> getUserInfoByUserId(String userId) {
         Optional<User> userOptional = userRepository.findById(userId);
@@ -135,7 +124,7 @@ public class UserService {
     }
     
     /**
-     * Update user profile image
+     * Update user profile image using FileStorageService
      * 
      * @param userId User ID
      * @param profileImage Profile image file
@@ -173,50 +162,30 @@ public class UserService {
                 return response;
             }
             
-            // Create user-specific directory path
-            String userFolderPath = "User_Profile_Images/" + userId;
-            Path userDir = Paths.get(profileImageBasePath, userId);
-            
-            // Create directory if it doesn't exist
-            Files.createDirectories(userDir);
-            
-            // Handle existing profile image - rename with timestamp if exists
+            // Handle existing profile image backup
             String existingImagePath = user.getProfilePictureUrl();
             if (existingImagePath != null && !existingImagePath.trim().isEmpty()) {
-                try {
-                    // Extract filename from existing path
-                    String existingFileName = extractFileNameFromUrl(existingImagePath);
-                    if (existingFileName != null) {
-                        Path existingFile = userDir.resolve(existingFileName);
-                        if (Files.exists(existingFile)) {
-                            // Create backup filename with timestamp
-                            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-                            String fileExtension = getFileExtension(existingFileName);
-                            String backupFileName = "backup_" + timestamp + 
-                                (fileExtension != null ? "." + fileExtension : "");
-                            Path backupFile = userDir.resolve(backupFileName);
-                            Files.move(existingFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
-                            log.info("Existing profile image backed up as: {}", backupFile);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to backup existing profile image: {}", e.getMessage());
-                    // Continue with upload even if backup fails
+                // Extract relative path from URL for backup
+                String relativePath = extractRelativePathFromUrl(existingImagePath);
+                if (relativePath != null) {
+                    fileStorageService.backupExistingProfileImage(userId, relativePath);
                 }
             }
             
-            // Generate new filename
+            // Store the new profile image using FileStorageService
+            byte[] fileContent = profileImage.getBytes();
             String originalFileName = profileImage.getOriginalFilename();
-            String fileExtension = getFileExtension(originalFileName);
-            String newFileName = "profile_" + System.currentTimeMillis() + 
-                (fileExtension != null ? "." + fileExtension : "");
             
-            // Save the new image
-            Path newImagePath = userDir.resolve(newFileName);
-            Files.copy(profileImage.getInputStream(), newImagePath, StandardCopyOption.REPLACE_EXISTING);
+            FileStorageService.StorageResult storageResult = fileStorageService.storeUserProfileImage(
+                userId, fileContent, originalFileName);
             
-            // Construct the URL
-            String imageUrl = constructImageUrl(userFolderPath + "/" + newFileName);
+            if (!storageResult.isSuccess()) {
+                response.put("error", "Failed to store profile image: " + storageResult.getErrorMessage());
+                return response;
+            }
+            
+            // Construct the full URL using FileStorageService
+            String imageUrl = fileStorageService.getFileUrl(storageResult.getStoredPath());
             
             // Update user's profile picture URL
             user.setProfilePictureUrl(imageUrl);
@@ -228,13 +197,15 @@ public class UserService {
             response.put("success", true);
             response.put("profilePictureUrl", imageUrl);
             response.put("message", "Profile image updated successfully");
+            response.put("fileSize", storageResult.getFileSize());
+            response.put("mimeType", storageResult.getMimeType());
             response.put("user", UserResponseDTO.fromEntity(updatedUser));
             
             return response;
             
         } catch (IOException e) {
-            log.error("Failed to upload profile image for user: {}", userId, e);
-            response.put("error", "Failed to upload profile image: " + e.getMessage());
+            log.error("Failed to read profile image file for user: {}", userId, e);
+            response.put("error", "Failed to read profile image file: " + e.getMessage());
             return response;
         } catch (Exception e) {
             log.error("Unexpected error while updating profile image for user: {}", userId, e);
@@ -244,35 +215,31 @@ public class UserService {
     }
     
     /**
-     * Extract filename from URL
+     * Extract relative path from full URL for backup purposes
      */
-    private String extractFileNameFromUrl(String url) {
-        if (url == null || url.trim().isEmpty()) {
+    private String extractRelativePathFromUrl(String fullUrl) {
+        if (fullUrl == null || fullUrl.trim().isEmpty()) {
             return null;
         }
-        int lastSlashIndex = url.lastIndexOf('/');
-        if (lastSlashIndex >= 0 && lastSlashIndex < url.length() - 1) {
-            return url.substring(lastSlashIndex + 1);
-        }
-        return url; // Return as is if no slash found
-    }
-    
-    /**
-     * Get file extension from filename
-     */
-    private String getFileExtension(String filename) {
-        if (filename == null || filename.lastIndexOf(".") == -1) {
+        
+        try {
+            // Look for the pattern that indicates the start of the relative path
+            // For user profile images, it should be "users/{userId}/profile/..."
+            int usersIndex = fullUrl.indexOf("users/");
+            if (usersIndex >= 0) {
+                return fullUrl.substring(usersIndex);
+            }
+            
+            // Fallback: try to extract everything after the last occurrence of "images/"
+            int imagesIndex = fullUrl.lastIndexOf("images/");
+            if (imagesIndex >= 0) {
+                return fullUrl.substring(imagesIndex + "images/".length());
+            }
+            
+            return null;
+        } catch (Exception e) {
+            log.warn("Failed to extract relative path from URL: {}", fullUrl, e);
             return null;
         }
-        return filename.substring(filename.lastIndexOf(".") + 1);
-    }
-    
-    /**
-     * Construct image URL from path
-     */
-    private String constructImageUrl(String path) {
-        String baseUrl = serverBaseUrl.endsWith("/") ? serverBaseUrl : serverBaseUrl + "/";
-        String imagePath = path.startsWith("/") ? path.substring(1) : path;
-        return baseUrl + imagePath;
     }
 }

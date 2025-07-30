@@ -6,6 +6,7 @@ import com.example.jwtauthenticator.dto.UserProfileUpdateRequestDTO;
 import com.example.jwtauthenticator.dto.UserResponseDTO;
 import com.example.jwtauthenticator.service.CategoryService;
 import com.example.jwtauthenticator.service.UserService;
+import com.example.jwtauthenticator.service.FileStorageService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,6 +49,9 @@ public class UserController {
  
 	@Autowired
     private  UserService userService;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
 
 
     @PostMapping("/get-by-id") 
@@ -141,6 +148,61 @@ public class UserController {
                 "success", false
             );
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Serve user profile image
+     * 
+     * @param userId The user ID
+     * @param filename The image filename
+     * @return The profile image file
+     */
+    @GetMapping("/profile/{userId}/image/{filename}")
+    @Operation(
+            summary = "Serve user profile image",
+            description = "Serve a user profile image file by user ID and filename"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Profile image served"),
+            @ApiResponse(responseCode = "404", description = "Profile image not found"),
+            @ApiResponse(responseCode = "500", description = "Error serving file")
+    })
+    public ResponseEntity<Resource> serveProfileImage(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable String userId,
+            @Parameter(description = "Image filename", required = true)
+            @PathVariable String filename) {
+        
+        try {
+            // Construct the relative path for the profile image
+            String relativePath = String.format("users/%s/profile/%s", userId, filename);
+            
+            // Get the file as resource using FileStorageService
+            Resource resource = fileStorageService.getFileAsResource(relativePath);
+            
+            // Determine content type
+            String contentType = "image/jpeg"; // Default
+            if (filename.toLowerCase().endsWith(".png")) {
+                contentType = "image/png";
+            } else if (filename.toLowerCase().endsWith(".gif")) {
+                contentType = "image/gif";
+            } else if (filename.toLowerCase().endsWith(".webp")) {
+                contentType = "image/webp";
+            }
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, 
+                            "inline; filename=\"" + filename + "\"")
+                    .body(resource);
+            
+        } catch (IOException e) {
+            log.error("Error serving profile image for user {}, filename {}: {}", userId, filename, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Unexpected error serving profile image for user {}, filename {}: {}", userId, filename, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
