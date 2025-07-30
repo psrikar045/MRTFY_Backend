@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
 import java.util.Date; // Still needed for dob (futureT1)
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -20,7 +22,7 @@ public class UserProfileUpdateRequestDTO {
     
     @Size(max = 20) 
     private String nationalCode; // Maps to futureI1
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "UTC")
     private Date dob;
 
     private String educationLevel; // Maps to futureV1
