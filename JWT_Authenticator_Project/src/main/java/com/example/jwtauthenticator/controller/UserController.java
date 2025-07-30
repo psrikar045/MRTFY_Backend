@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,8 +29,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -91,5 +95,52 @@ public class UserController {
         return userService.getUserInfoByEmail(email)
                 .map(userResponseDTO -> new ResponseEntity<>(userResponseDTO, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+    
+    /**
+     * Upload/Update user profile image
+     * 
+     * @param profileImage The profile image file
+     * @param userId The user ID
+     * @return Response containing the image URL and updated user info
+     */
+    @PutMapping(value = "/profile/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Update user profile image",
+            description = "Upload and update user profile image. If a profile image already exists, it will be backed up with a timestamp.",
+            security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Profile image updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request - missing file or user ID"),
+            @ApiResponse(responseCode = "404", description = "User not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<Map<String, Object>> updateProfileImage(
+            @RequestParam("profileImage") MultipartFile profileImage,
+            @RequestParam("userId") String userId) {
+        
+        log.info("Profile image upload request received for user: {}", userId);
+        
+        try {
+            Map<String, Object> response = userService.updateProfileImage(userId, profileImage);
+            
+            if (response.containsKey("error")) {
+                log.warn("Profile image upload failed for user {}: {}", userId, response.get("error"));
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            log.info("Profile image upload successful for user: {}", userId);
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Unexpected error during profile image upload for user: {}", userId, e);
+            Map<String, Object> errorResponse = Map.of(
+                "error", "An unexpected error occurred: " + e.getMessage(),
+                "success", false
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 }
