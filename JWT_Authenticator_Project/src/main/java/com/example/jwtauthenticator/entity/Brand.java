@@ -18,6 +18,28 @@ import java.util.List;
     @Index(name = "idx_brand_website", columnList = "website"),
     @Index(name = "idx_brand_created", columnList = "createdAt")
 })
+@NamedEntityGraphs({
+    @NamedEntityGraph(
+        name = "Brand.withAssets",
+        attributeNodes = @NamedAttributeNode("assets")
+    ),
+    @NamedEntityGraph(
+        name = "Brand.withColors", 
+        attributeNodes = @NamedAttributeNode("colors")
+    ),
+    @NamedEntityGraph(
+        name = "Brand.withFonts",
+        attributeNodes = @NamedAttributeNode("fonts")
+    ),
+    @NamedEntityGraph(
+        name = "Brand.withSocialLinks",
+        attributeNodes = @NamedAttributeNode("socialLinks")
+    ),
+    @NamedEntityGraph(
+        name = "Brand.withImages",
+        attributeNodes = @NamedAttributeNode("images")
+    )
+})
 @Data
 @Builder
 @NoArgsConstructor
@@ -85,24 +107,29 @@ public class Brand {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
     
-    // Relationships
+    // Relationships with batch fetching to optimize N+1 queries
     @OneToMany(mappedBy = "brand", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 25)
     @Builder.Default
     private List<BrandAsset> assets = new ArrayList<>();
     
     @OneToMany(mappedBy = "brand", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 25)
     @Builder.Default
     private List<BrandColor> colors = new ArrayList<>();
     
     @OneToMany(mappedBy = "brand", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 25)
     @Builder.Default
     private List<BrandFont> fonts = new ArrayList<>();
     
     @OneToMany(mappedBy = "brand", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 25)
     @Builder.Default
     private List<BrandSocialLink> socialLinks = new ArrayList<>();
     
     @OneToMany(mappedBy = "brand", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 25)
     @Builder.Default
     private List<BrandImage> images = new ArrayList<>();
     

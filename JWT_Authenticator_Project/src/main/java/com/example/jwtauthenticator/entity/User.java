@@ -1,5 +1,6 @@
 package com.example.jwtauthenticator.entity;
 
+import com.example.jwtauthenticator.enums.UserPlan;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,6 +10,7 @@ import org.hibernate.annotations.GenericGenerator;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.UUID;
@@ -88,6 +90,20 @@ public class User {
     @Column(name = "profile_picture_url")
     private String profilePictureUrl;
 
+    // Plan-related fields
+    @Enumerated(EnumType.STRING)
+    @Column(name = "plan", nullable = false)
+    private UserPlan plan = UserPlan.FREE; // Default to FREE plan
+    
+    @Column(name = "plan_started_at")
+    private LocalDateTime planStartedAt;
+    
+    @Column(name = "monthly_reset_date")
+    private LocalDate monthlyResetDate; // Date when monthly quotas reset (based on signup date)
+    
+    @Column(name = "plan_expires_at")
+    private LocalDateTime planExpiresAt; // For trial periods or temporary upgrades
+
     @PrePersist
     protected void onCreate() {
         if (userId == null) {
@@ -95,6 +111,18 @@ public class User {
         }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        
+        // Initialize plan-related fields
+        if (plan == null) {
+            plan = UserPlan.FREE;
+        }
+        if (planStartedAt == null) {
+            planStartedAt = LocalDateTime.now();
+        }
+        if (monthlyResetDate == null) {
+            monthlyResetDate = LocalDate.now(); // Reset on signup date each month
+        }
+        
         // Only set emailVerified to false if it hasn't been explicitly set
         // This allows Google users to have emailVerified = true
         if (authProvider == null) {
@@ -136,6 +164,72 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    // Plan-related helper methods
+    public boolean canCreateApiKey() {
+        return plan.getMaxApiKeys() == -1 || getCurrentApiKeyCount() < plan.getMaxApiKeys();
+    }
+    
+    public boolean canClaimDomain() {
+        return plan.getMaxDomains() == -1 || getCurrentDomainCount() < plan.getMaxDomains();
+    }
+    
+    public int getRemainingApiKeys() {
+        if (plan.getMaxApiKeys() == -1) return Integer.MAX_VALUE;
+        return Math.max(0, plan.getMaxApiKeys() - getCurrentApiKeyCount());
+    }
+    
+    public int getRemainingDomains() {
+        if (plan.getMaxDomains() == -1) return Integer.MAX_VALUE;
+        return Math.max(0, plan.getMaxDomains() - getCurrentDomainCount());
+    }
+    
+    public boolean isPlanExpired() {
+        return planExpiresAt != null && planExpiresAt.isBefore(LocalDateTime.now());
+    }
+    
+    public boolean needsMonthlyReset() {
+        if (monthlyResetDate == null) return true;
+        LocalDate now = LocalDate.now();
+        LocalDate nextResetDate = monthlyResetDate.withMonth(now.getMonth().getValue()).withYear(now.getYear());
+        
+        // If we're past the reset date for this month
+        return now.isAfter(nextResetDate) || now.isEqual(nextResetDate);
+    }
+    
+    public LocalDate getNextResetDate() {
+        if (monthlyResetDate == null) return LocalDate.now();
+        
+        LocalDate now = LocalDate.now();
+        LocalDate nextReset = monthlyResetDate.withMonth(now.getMonth().getValue()).withYear(now.getYear());
+        
+        // If we've already passed this month's reset date, move to next month
+        if (now.isAfter(nextReset)) {
+            nextReset = nextReset.plusMonths(1);
+        }
+        
+        return nextReset;
+    }
+    
+    // These would be populated by services when needed
+    private transient int currentApiKeyCount = 0;
+    private transient int currentDomainCount = 0;
+    
+    public int getCurrentApiKeyCount() {
+        return currentApiKeyCount;
+    }
+    
+    public void setCurrentApiKeyCount(int count) {
+        this.currentApiKeyCount = count;
+    }
+    
+    public int getCurrentDomainCount() {
+        return currentDomainCount;
+    }
+    
+    public void setCurrentDomainCount(int count) {
+        this.currentDomainCount = count;
     }
 
     public enum Role {

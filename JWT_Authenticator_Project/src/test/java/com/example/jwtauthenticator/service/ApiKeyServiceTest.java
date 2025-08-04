@@ -5,6 +5,7 @@ import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.util.ApiKeyHashUtil;
@@ -70,7 +71,7 @@ class ApiKeyServiceTest {
                 .description("Test description")
                 .prefix("sk-")
                 .isActive(true)
-                .rateLimitTier("BASIC")
+                .rateLimitTier(RateLimitTier.FREE_TIER)
                 .scopes("READ_USERS,READ_BRANDS")
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())

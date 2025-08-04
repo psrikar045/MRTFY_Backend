@@ -76,7 +76,7 @@ public class ApiKeyService {
                 RateLimitTier.valueOf(request.getRateLimitTier().toUpperCase());
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid rate limit tier: " + request.getRateLimitTier() + 
-                    ". Valid values are: BASIC, STANDARD, PREMIUM, ENTERPRISE, UNLIMITED");
+                    ". Valid values are: FREE_TIER, PRO_TIER, BUSINESS_TIER");
             }
         }
         
@@ -112,11 +112,13 @@ public class ApiKeyService {
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .prefix(request.getPrefix())
+                .registeredDomain(request.getRegisteredDomain()) // Add the missing registeredDomain field
                 .isActive(true)
                 .expiresAt(expirationDate) // Use the processed expiration date
                 .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
                 .allowedDomains(request.getAllowedDomains() != null ? String.join(",", request.getAllowedDomains()) : null)
-                .rateLimitTier(request.getRateLimitTier())
+                .rateLimitTier(request.getRateLimitTier() != null && !request.getRateLimitTier().trim().isEmpty() ? 
+                              RateLimitTier.valueOf(request.getRateLimitTier().toUpperCase().trim()) : RateLimitTier.FREE_TIER)
                 .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
                 .build();
 
@@ -174,7 +176,7 @@ public class ApiKeyService {
                 existingKey.setAllowedDomains(String.join(",", request.getAllowedDomains()));
             }
             if (request.getRateLimitTier() != null) {
-                existingKey.setRateLimitTier(request.getRateLimitTier());
+                existingKey.setRateLimitTier(RateLimitTier.valueOf(request.getRateLimitTier()));
             }
             return ApiKeyResponseDTO.fromEntity(apiKeyRepository.save(existingKey));
         });
@@ -234,6 +236,16 @@ public class ApiKeyService {
             key.setLastUsedAt(LocalDateTime.now());
             apiKeyRepository.save(key);
         });
+    }
+
+    /**
+     * Check if an API key belongs to a specific user.
+     */
+    @Transactional(readOnly = true)
+    public boolean apiKeyBelongsToUser(UUID keyId, String userFkId) {
+        return apiKeyRepository.findById(keyId)
+                .map(apiKey -> apiKey.getUserFkId().equals(userFkId))
+                .orElse(false);
     }
 
     /**

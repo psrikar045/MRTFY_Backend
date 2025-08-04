@@ -1,5 +1,6 @@
 package com.example.jwtauthenticator.entity;
 
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Entity to track API key usage statistics and rate limiting
@@ -26,10 +28,10 @@ public class ApiKeyUsageStats {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    private UUID id;
 
     @Column(name = "api_key_id", nullable = false)
-    private String apiKeyId;
+    private UUID apiKeyId;
 
     @Column(name = "user_fk_id", nullable = false)
     private String userFkId;
@@ -125,6 +127,13 @@ public class ApiKeyUsageStats {
      * Increment request count
      */
     public void incrementRequestCount() {
+        if (this.requestCount == null) {
+            this.requestCount = 0;
+        }
+        if (this.totalRequestsLifetime == null) {
+            this.totalRequestsLifetime = 0L;
+        }
+        
         this.requestCount++;
         this.totalRequestsLifetime++;
         this.remainingRequests = Math.max(0, requestLimit - requestCount);
@@ -145,6 +154,9 @@ public class ApiKeyUsageStats {
      * Increment blocked request count
      */
     public void incrementBlockedRequests() {
+        if (this.blockedRequests == null) {
+            this.blockedRequests = 0;
+        }
         this.blockedRequests++;
     }
 
@@ -159,5 +171,27 @@ public class ApiKeyUsageStats {
         this.isRateLimited = false;
         this.rateLimitResetAt = null;
         this.firstRequestAt = null;
+    }
+    
+    /**
+     * Initialize null fields after loading from database
+     */
+    @PostLoad
+    private void initializeNullFields() {
+        if (this.requestCount == null) {
+            this.requestCount = 0;
+        }
+        if (this.blockedRequests == null) {
+            this.blockedRequests = 0;
+        }
+        if (this.totalRequestsLifetime == null) {
+            this.totalRequestsLifetime = 0L;
+        }
+        if (this.peakRequestsPerMinute == null) {
+            this.peakRequestsPerMinute = 0;
+        }
+        if (this.isRateLimited == null) {
+            this.isRateLimited = false;
+        }
     }
 }

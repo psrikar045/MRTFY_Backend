@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * DTO for API key statistics and usage metrics
@@ -18,7 +19,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ApiKeyStatisticsDTO {
     
-    private String apiKeyId;
+    private UUID apiKeyId;
     private int periodHours;
     private ApiKeyUsageStats currentUsage;
     

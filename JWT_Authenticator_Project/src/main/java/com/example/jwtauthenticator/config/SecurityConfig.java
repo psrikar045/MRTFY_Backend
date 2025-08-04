@@ -3,6 +3,7 @@ package com.example.jwtauthenticator.config;
 import com.example.jwtauthenticator.security.JwtRequestFilter;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
 import com.example.jwtauthenticator.security.ApiKeyAuthenticationFilter;
+import com.example.jwtauthenticator.security.ExternalApiSecurityFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,16 +32,19 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     private final JwtRequestFilter jwtRequestFilter;
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
+    private final ExternalApiSecurityFilter externalApiSecurityFilter;
     
     @Autowired
     private AppConfig appConfig;
 
     public SecurityConfig(JwtUserDetailsService jwtUserDetailsService, PasswordEncoder passwordEncoder, 
-                         JwtRequestFilter jwtRequestFilter, ApiKeyAuthenticationFilter apiKeyAuthenticationFilter) {
+                         JwtRequestFilter jwtRequestFilter, ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
+                         ExternalApiSecurityFilter externalApiSecurityFilter) {
         this.jwtUserDetailsService = jwtUserDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.jwtRequestFilter = jwtRequestFilter;
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
+        this.externalApiSecurityFilter = externalApiSecurityFilter;
     }
 
     @Bean
@@ -111,7 +115,10 @@ public class SecurityConfig {
                         "/api/brands/all",
                         
                         // External API endpoints (will be protected by API key filter)
-                        "/api/external/**"
+                        "/api/external/**",
+                        
+                        // NEW: Secure API endpoints (public-facing with API key + domain validation)
+                        "/api/secure/**"
                         
                     ).permitAll()
                     .anyRequest().authenticated()
@@ -119,7 +126,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(jwtRequestFilter, ApiKeyAuthenticationFilter.class);
+                .addFilterAfter(jwtRequestFilter, ApiKeyAuthenticationFilter.class)
+                .addFilterAfter(externalApiSecurityFilter, JwtRequestFilter.class);
 
         return http.build();
     }
@@ -131,7 +139,16 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(Arrays.asList("*"));
         configuration.setAllowedMethods(Arrays.asList("*"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setExposedHeaders(Arrays.asList("Authorization", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"));
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization", 
+            "X-RateLimit-Limit", 
+            "X-RateLimit-Remaining", 
+            "X-RateLimit-Reset",
+            "X-RateLimit-Tier",
+            "X-RateLimit-Additional-Available",
+            "X-RateLimit-Total-Remaining",
+            "X-RateLimit-Used-AddOn"
+        ));
         configuration.setAllowCredentials(false); // Must be false when using wildcard origins
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

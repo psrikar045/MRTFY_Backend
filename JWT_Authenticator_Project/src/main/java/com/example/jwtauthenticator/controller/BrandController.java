@@ -10,6 +10,7 @@ import com.example.jwtauthenticator.repository.BrandRepository;
 import com.example.jwtauthenticator.service.BrandDataService;
 import com.example.jwtauthenticator.service.BrandExtractionService;
 import com.example.jwtauthenticator.service.BrandManagementService;
+import com.example.jwtauthenticator.service.BrandOptimizedService;
 import com.example.jwtauthenticator.service.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -52,6 +53,7 @@ public class BrandController {
     private final BrandAssetRepository brandAssetRepository;
     private final BrandImageRepository brandImageRepository;
     private final BrandRepository brandRepository;
+    private final BrandOptimizedService brandOptimizedService;
     
     @GetMapping("/{id}")
     @Operation(
@@ -445,32 +447,144 @@ public class BrandController {
     
     /**
      * Endpoint 1: Get All Brands
-     * Path: /brands
+     * Path: /brands/all
      * Method: GET
      */
     @GetMapping("/all")
     @Operation(
         summary = "Get all brands",
-        description = "Retrieve a list of all brands from the brands table"
+        description = "Retrieve a list of all brands from the brands table. For large datasets, consider using the paginated version."
     )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<?> getAllBrands() {
+    public ResponseEntity<?> getAllBrands(
+            @RequestParam(defaultValue = "false") boolean paginated,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        long startTime = System.currentTimeMillis();
         try {
-            List<Brand> brands = brandRepository.findAll();
-            List<BrandDataResponse> response = brands.stream()
-                .map(brandDataService::convertToResponse)
-                .collect(Collectors.toList());
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("data", response);
-            return ResponseEntity.ok(result);
+            if (paginated) {
+                // Use paginated query for better performance with large datasets
+                Pageable pageable = PageRequest.of(page, Math.min(size, 100)); // Max 100 per page
+                Page<Brand> brandPage = brandOptimizedService.findAllBrandsWithRelations(pageable);
+                List<BrandDataResponse> response = brandPage.getContent().stream()
+                    .map(brandDataService::convertToResponse)
+                    .collect(Collectors.toList());
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("data", response);
+                result.put("totalElements", brandPage.getTotalElements());
+                result.put("totalPages", brandPage.getTotalPages());
+                result.put("currentPage", brandPage.getNumber());
+                result.put("pageSize", brandPage.getSize());
+                result.put("hasNext", brandPage.hasNext());
+                result.put("hasPrevious", brandPage.hasPrevious());
+                result.put("executionTimeMs", System.currentTimeMillis() - startTime);
+                log.info("Retrieved {} brands (paginated) in {} ms", response.size(), System.currentTimeMillis() - startTime);
+                return ResponseEntity.ok(result);
+            } else {
+                // Use optimized service to avoid N+1 problem and MultipleBagFetchException
+                List<Brand> brands = brandOptimizedService.findAllBrandsWithRelations();
+                List<BrandDataResponse> response = brands.stream()
+                    .map(brandDataService::convertToResponse)
+                    .collect(Collectors.toList());
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("data", response);
+                result.put("count", response.size());
+                result.put("executionTimeMs", System.currentTimeMillis() - startTime);
+                log.info("Retrieved {} brands (all) in {} ms", response.size(), System.currentTimeMillis() - startTime);
+                return ResponseEntity.ok(result);
+            }
         } catch (Exception e) {
             log.error("Error retrieving all brands", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(createErrorResponse("Error retrieving brands: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Performance Test Endpoint - Compare old vs new query performance
+     * Path: /brands/performance-test
+     * Method: GET
+     */
+    @GetMapping("/performance-test")
+    @Operation(
+        summary = "Performance test endpoint",
+        description = "Compare performance between old findAll() and optimized findAllWithRelations() queries"
+    )
+    public ResponseEntity<?> performanceTest() {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // Test old method (N+1 problem)
+            long startTime1 = System.currentTimeMillis();
+            List<Brand> brandsOld = brandRepository.findAll();
+            
+            // Force lazy loading to simulate the N+1 problem
+            int totalRelations1 = 0;
+            for (Brand brand : brandsOld) {
+                totalRelations1 += brand.getAssets().size();
+                totalRelations1 += brand.getColors().size();
+                totalRelations1 += brand.getFonts().size();
+                totalRelations1 += brand.getSocialLinks().size();
+                totalRelations1 += brand.getImages().size();
+            }
+            long totalTime1 = System.currentTimeMillis() - startTime1;
+            
+            // Test new optimized method
+            long startTime2 = System.currentTimeMillis();
+            List<Brand> brandsNew = brandOptimizedService.findAllBrandsWithRelations();
+            
+            // Count relations (already loaded efficiently)
+            int totalRelations2 = 0;
+            for (Brand brand : brandsNew) {
+                totalRelations2 += brand.getAssets().size();
+                totalRelations2 += brand.getColors().size();
+                totalRelations2 += brand.getFonts().size();
+                totalRelations2 += brand.getSocialLinks().size();
+                totalRelations2 += brand.getImages().size();
+            }
+            long totalTime2 = System.currentTimeMillis() - startTime2;
+            
+            result.put("oldMethod", Map.of(
+                "totalTimeMs", totalTime1,
+                "brandCount", brandsOld.size(),
+                "totalRelations", totalRelations1,
+                "method", "findAll() with lazy loading (N+1 problem)",
+                "estimatedQueries", 1 + (brandsOld.size() * 5)
+            ));
+            
+            result.put("newMethod", Map.of(
+                "totalTimeMs", totalTime2,
+                "brandCount", brandsNew.size(),
+                "totalRelations", totalRelations2,
+                "method", "BrandOptimizedService with 6 optimized queries",
+                "actualQueries", 6
+            ));
+            
+            double improvementPercent = totalTime1 > 0 ? 
+                Math.round(((double)(totalTime1 - totalTime2) / totalTime1) * 100) : 0;
+            double performanceGain = totalTime2 > 0 ? (double)totalTime1 / totalTime2 : 0;
+            
+            result.put("improvement", Map.of(
+                "timeReductionMs", totalTime1 - totalTime2,
+                "timeReductionPercent", improvementPercent,
+                "performanceGain", String.format("%.1fx faster", performanceGain),
+                "queryReduction", String.format("From %d queries to 6 queries", 1 + (brandsOld.size() * 5))
+            ));
+            
+            log.info("Performance test completed - Old: {}ms ({} queries), New: {}ms (6 queries), Improvement: {}%", 
+                totalTime1, 1 + (brandsOld.size() * 5), totalTime2, improvementPercent);
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            log.error("Error in performance test", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Performance test failed: " + e.getMessage()));
         }
     }
     

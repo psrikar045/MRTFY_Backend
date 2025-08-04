@@ -6,13 +6,17 @@ package com.example.jwtauthenticator.enums;
  */
 public enum ApiKeyScope {
     
-    // ===== READ PERMISSIONS =====
+    // ===== BASIC READ PERMISSIONS =====
+    READ_BASIC("read.basic", "Basic read access to public data"),
+    READ_ADVANCED("read.advanced", "Advanced read access to detailed data"),
     READ_USERS("user.read", "Read user information and profiles"),
     READ_BRANDS("brand.read", "Read brand information and assets"),
     READ_CATEGORIES("category.read", "Read category hierarchy and information"),
     READ_API_KEYS("apikey.read", "Read own API key information"),
     
     // ===== WRITE PERMISSIONS =====
+    WRITE_BASIC("write.basic", "Basic write access to user data"),
+    WRITE_ADVANCED("write.advanced", "Advanced write access to system data"),
     WRITE_USERS("user.write", "Create and update user information"),
     WRITE_BRANDS("brand.write", "Create and update brand information"),
     WRITE_CATEGORIES("category.write", "Create and update categories"),
@@ -35,7 +39,26 @@ public enum ApiKeyScope {
     
     // ===== BUSINESS API PERMISSIONS =====
     BUSINESS_READ("business.read", "Read business-related data via API"),
-    BUSINESS_WRITE("business.write", "Write business-related data via API");
+    BUSINESS_WRITE("business.write", "Write business-related data via API"),
+    
+    // ===== SERVER-TO-SERVER PERMISSIONS =====
+    SERVER_ACCESS("server.access", "Server-to-server communication access"),
+    BACKEND_API("backend.api", "Backend service API access"),
+    SERVICE_ACCESS("service.access", "Microservice communication access"),
+    INTERNAL_API("internal.api", "Internal API access (bypasses domain validation)"),
+    
+    // ===== DOMAIN AND HEALTH MONITORING =====
+    DOMAIN_HEALTH("domain.health", "Access domain health monitoring"),
+    DOMAIN_INSIGHTS("domain.insights", "Access domain analytics and insights"),
+    DOMAIN_MANAGEMENT("domain.management", "Manage domain settings and configuration"),
+    
+    // ===== AI AND ANALYTICS =====
+    AI_SUMMARIES("ai.summaries", "Access AI-generated summaries and insights"),
+    ANALYTICS_READ("analytics.read", "Read analytics and reporting data"),
+    ANALYTICS_WRITE("analytics.write", "Write analytics and tracking data"),
+    
+    // ===== SPECIAL DOMAIN BYPASS PERMISSIONS =====
+    DOMAINLESS_ACCESS("domainless.access", "Explicit permission to bypass domain validation");
     
     private final String permission;
     private final String description;

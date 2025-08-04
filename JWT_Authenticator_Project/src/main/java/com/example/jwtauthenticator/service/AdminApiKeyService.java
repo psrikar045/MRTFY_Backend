@@ -32,7 +32,6 @@ public class AdminApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository;
     private final ApiKeyHashUtil apiKeyHashUtil;
-    private final RateLimitService rateLimitService;
     
     /**
      * Get all API keys in the system (admin only).
@@ -85,7 +84,8 @@ public class AdminApiKeyService {
             .expiresAt(request.getExpiresAt())
             .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
             .allowedDomains(request.getAllowedDomains() != null ? String.join(",", request.getAllowedDomains()) : null)
-            .rateLimitTier(request.getRateLimitTier())
+            .rateLimitTier(request.getRateLimitTier() != null ? 
+                          RateLimitTier.valueOf(request.getRateLimitTier()) : RateLimitTier.FREE_TIER)
             .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
             .build();
         
@@ -147,21 +147,16 @@ public class AdminApiKeyService {
             // Rate limiting information
             stats.put("rateLimitTier", apiKey.getRateLimitTier());
             
-            // Get request count from rate limiting service
-            long totalRequests = rateLimitService.getTotalRequestCount(apiKey.getKeyHash());
-            stats.put("totalRequests24h", totalRequests);
-            
-            // Current rate limit status
-            RateLimitTier tier = getRateLimitTier(apiKey.getRateLimitTier());
-            RateLimitService.RateLimitStatus rateLimitStatus = 
-                rateLimitService.getRateLimitStatus(apiKey.getKeyHash(), tier);
+            // Rate limiting information (now handled by ProfessionalRateLimitService)
+            // TODO: Integrate with ApiKeyUsageStats for admin dashboard if needed
+            stats.put("totalRequests24h", 0L); // Placeholder - can be implemented later with ApiKeyUsageStats
             
             Map<String, Object> rateLimitInfo = new HashMap<>();
-            rateLimitInfo.put("currentRequests", rateLimitStatus.getCurrentRequests());
-            rateLimitInfo.put("maxRequests", rateLimitStatus.getMaxRequests());
-            rateLimitInfo.put("remainingRequests", rateLimitStatus.getRemainingRequests());
-            rateLimitInfo.put("windowEnd", rateLimitStatus.getWindowEnd());
-            rateLimitInfo.put("isLimited", rateLimitStatus.isLimited());
+            rateLimitInfo.put("currentRequests", 0);
+            rateLimitInfo.put("maxRequests", apiKey.getRateLimitTier() != null ? apiKey.getRateLimitTier().getRequestLimit() : 0);
+            rateLimitInfo.put("remainingRequests", 0);
+            rateLimitInfo.put("windowEnd", null);
+            rateLimitInfo.put("isLimited", false);
             
             stats.put("rateLimit", rateLimitInfo);
             
@@ -199,7 +194,7 @@ public class AdminApiKeyService {
         // Rate limit tier distribution
         Map<String, Long> tierDistribution = apiKeyRepository.findAll().stream()
             .collect(Collectors.groupingBy(
-                key -> key.getRateLimitTier() != null ? key.getRateLimitTier() : "BASIC",
+                key -> key.getRateLimitTier() != null ? key.getRateLimitTier().name() : "FREE_TIER",
                 Collectors.counting()
             ));
         stats.put("rateLimitTierDistribution", tierDistribution);
@@ -225,14 +220,13 @@ public class AdminApiKeyService {
     
     /**
      * Reset rate limit for a specific API key.
+     * Note: Rate limiting is now handled by ProfessionalRateLimitService via ApiKeyUsageStats
      */
     @Transactional
     public boolean resetRateLimit(UUID keyId) {
-        return apiKeyRepository.findById(keyId).map(apiKey -> {
-            rateLimitService.clearRateLimit(apiKey.getKeyHash());
-            log.info("Admin reset rate limit for API key '{}' (ID: {})", apiKey.getName(), keyId);
-            return true;
-        }).orElse(false);
+        // TODO: Implement rate limit reset with ApiKeyUsageStats if needed
+        log.info("Rate limit reset requested for API key ID: {} (not implemented - using new system)", keyId);
+        return false; // Not implemented with new rate limiting system
     }
     
     /**
@@ -254,13 +248,13 @@ public class AdminApiKeyService {
      */
     private RateLimitTier getRateLimitTier(String tierString) {
         if (tierString == null) {
-            return RateLimitTier.BASIC;
+            return RateLimitTier.FREE_TIER;
         }
         
         try {
             return RateLimitTier.valueOf(tierString.toUpperCase());
         } catch (IllegalArgumentException e) {
-            return RateLimitTier.BASIC;
+            return RateLimitTier.FREE_TIER;
         }
     }
 }

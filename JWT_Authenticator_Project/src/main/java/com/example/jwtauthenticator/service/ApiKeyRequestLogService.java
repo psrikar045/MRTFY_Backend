@@ -136,7 +136,7 @@ public class ApiKeyRequestLogService {
                     .requestTimestamp(LocalDateTime.now())
                     .responseStatus(responseStatus)
                     .responseTimeMs(responseTimeMs)
-                    .rateLimitTier(apiKey.getRateLimitTier())
+                    .rateLimitTier(apiKey.getRateLimitTier() != null ? apiKey.getRateLimitTier().name() : "FREE_TIER")
                     .isAllowedIp(isAllowedIp)
                     .isAllowedDomain(isAllowedDomain)
                     .errorMessage(errorMessage)

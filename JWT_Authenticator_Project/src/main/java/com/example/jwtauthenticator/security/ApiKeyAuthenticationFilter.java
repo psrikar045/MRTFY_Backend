@@ -4,7 +4,6 @@ import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.enums.ApiKeyScope;
 import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.service.ApiKeyService;
-import com.example.jwtauthenticator.service.RateLimitService;
 import com.example.jwtauthenticator.util.ApiKeyHashUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -20,6 +19,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Spring Security filter that handles API key authentication.
@@ -44,8 +44,17 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private static final String RATE_LIMIT_RESET_HEADER = "X-RateLimit-Reset";
     
     private final ApiKeyService apiKeyService;
-    private final RateLimitService rateLimitService;
     private final ApiKeyHashUtil apiKeyHashUtil;
+    
+    // INTEGRATION: Add new services for comprehensive API key functionality
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.jwtauthenticator.service.UsageStatsService usageStatsService;
+    
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.jwtauthenticator.service.RequestLoggingService requestLoggingService;
+    
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.jwtauthenticator.service.ApiKeyAddOnService addOnService;
     
     @Override
     protected void doFilterInternal(HttpServletRequest request, 
@@ -63,6 +72,12 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         log.debug("Processing API key authentication for request: {} {}", 
                  request.getMethod(), request.getRequestURI());
         
+        // Variables for tracking request processing
+        boolean authenticationSuccessful = false;
+        String apiKeyId = null;
+        String userFkId = null;
+        RateLimitTier rateLimitTier = null;
+        
         try {
             // Validate and authenticate the API key
             Optional<ApiKey> validatedKey = validateApiKey(apiKey);
@@ -70,45 +85,44 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             if (validatedKey.isEmpty()) {
                 log.warn("Invalid API key used for request: {} {} from IP: {}", 
                         request.getMethod(), request.getRequestURI(), getClientIpAddress(request));
+                
+                // INTEGRATION: Log failed authentication attempt
+                logRequestAsync(null, null, request, response, false);
+                
                 sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid API key");
                 return;
             }
             
             ApiKey apiKeyEntity = validatedKey.get();
+            apiKeyId = apiKeyEntity.getId().toString();
+            userFkId = apiKeyEntity.getUserFkId();
+            rateLimitTier = apiKeyEntity.getRateLimitTier() != null ? 
+                           apiKeyEntity.getRateLimitTier() : RateLimitTier.FREE_TIER;
             
             // Check if key is active and not expired
             if (!isKeyActive(apiKeyEntity)) {
                 log.warn("Inactive or expired API key used: {} from IP: {}", 
                         apiKeyEntity.getName(), getClientIpAddress(request));
+                
+                // INTEGRATION: Log inactive key usage attempt
+                logRequestAsync(apiKeyId, userFkId, request, response, false);
+                
                 sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, "API key is inactive or expired");
                 return;
             }
             
-            // Check IP restrictions
-            if (!isIpAllowed(apiKeyEntity, request)) {
-                log.warn("API key {} used from unauthorized IP: {}", 
-                        apiKeyEntity.getName(), getClientIpAddress(request));
-                sendErrorResponse(response, HttpServletResponse.SC_FORBIDDEN, "IP address not allowed");
-                return;
-            }
+            // NOTE: IP and domain validation removed from filter
+            // Controllers now handle their own security requirements:
+            // - /api/external/** uses basic validation in filter + scopes in controller
+            // - /api/secure/** uses advanced ApiKeyDomainGuard in controller
+            // - /forward uses no domain validation (internal/testing use)
+            log.debug("API key authentication successful, controllers will handle authorization");
             
-            // Check domain restrictions
-            if (!isDomainAllowed(apiKeyEntity, request)) {
-                log.warn("API key {} used from unauthorized domain: {}", 
-                        apiKeyEntity.getName(), request.getHeader("Origin"));
-                sendErrorResponse(response, HttpServletResponse.SC_FORBIDDEN, "Domain not allowed");
-                return;
-            }
-            
-            // Check rate limits
-            RateLimitTier rateLimitTier = getRateLimitTier(apiKeyEntity.getRateLimitTier());
-            if (!rateLimitService.isAllowed(apiKeyEntity.getKeyHash(), rateLimitTier)) {
-                log.warn("Rate limit exceeded for API key: {} from IP: {}", 
-                        apiKeyEntity.getName(), getClientIpAddress(request));
-                addRateLimitHeaders(response, apiKeyEntity.getKeyHash(), rateLimitTier);
-                sendErrorResponse(response, 429, "Rate limit exceeded");
-                return;
-            }
+            // NOTE: Rate limiting removed from filter
+            // Controllers now handle their own rate limiting:
+            // - /api/secure/** uses ProfessionalRateLimitService
+            // - /forward uses appropriate rate limiting per auth method
+            // - /api/external/** can use basic rate limiting if needed
             
             // Parse scopes
             ApiKeyScope[] scopes = parseScopes(apiKeyEntity.getScopes());
@@ -124,22 +138,53 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             // Set authentication in security context
             SecurityContextHolder.getContext().setAuthentication(authentication);
             
-            // Add rate limit headers to response
-            addRateLimitHeaders(response, apiKeyEntity.getKeyHash(), rateLimitTier);
-            
             // Update last used timestamp (async to avoid blocking)
             updateLastUsedAsync(apiKeyEntity);
+            
+            // INTEGRATION: Record usage statistics (async)
+            // Skip usage tracking for /api/secure/rivofetch as it handles its own tracking via ProfessionalRateLimitService
+            // All other endpoints are free and don't count against usage limits
+            String requestURI = request.getRequestURI();
+            if (!"/api/secure/rivofetch".equals(requestURI)) {
+                // Note: Currently no other endpoints count against usage limits
+                // This is reserved for future paid endpoints if needed
+                // recordUsageStatsAsync(apiKeyId, userFkId, request, rateLimitTier);
+            }
+            
+            authenticationSuccessful = true;
             
             log.debug("API key authentication successful for key: {} (user: {})", 
                      apiKeyEntity.getName(), apiKeyEntity.getUserFkId());
             
         } catch (Exception e) {
             log.error("Error processing API key authentication", e);
+            
+            // INTEGRATION: Log error
+            logRequestAsync(apiKeyId, userFkId, request, response, false);
+            
             sendErrorResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error");
             return;
         }
         
-        filterChain.doFilter(request, response);
+        try {
+            // Continue with the filter chain
+            filterChain.doFilter(request, response);
+            
+            // INTEGRATION: Log successful request after processing
+            if (authenticationSuccessful) {
+                logRequestAsync(apiKeyId, userFkId, request, response, true);
+                
+                // INTEGRATION: Consume add-on requests if applicable
+                consumeAddOnRequestsAsync(apiKeyId);
+            }
+            
+        } catch (Exception e) {
+            // INTEGRATION: Log failed request processing
+            if (authenticationSuccessful) {
+                logRequestAsync(apiKeyId, userFkId, request, response, false);
+            }
+            throw e;
+        }
     }
     
     /**
@@ -287,30 +332,25 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
      */
     private RateLimitTier getRateLimitTier(String tierString) {
         if (tierString == null) {
-            return RateLimitTier.BASIC;
+            return RateLimitTier.FREE_TIER;
         }
         
         try {
             return RateLimitTier.valueOf(tierString.toUpperCase());
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid rate limit tier: {}, defaulting to BASIC", tierString);
-            return RateLimitTier.BASIC;
+            log.warn("Invalid rate limit tier: {}, defaulting to FREE_TIER", tierString);
+            return RateLimitTier.FREE_TIER;
         }
     }
     
     /**
      * Add rate limiting headers to response.
+     * Note: Rate limiting headers are now handled by individual controllers using ProfessionalRateLimitService
      */
     private void addRateLimitHeaders(HttpServletResponse response, String apiKeyHash, RateLimitTier tier) {
-        try {
-            RateLimitService.RateLimitStatus status = rateLimitService.getRateLimitStatus(apiKeyHash, tier);
-            
-            response.setHeader(RATE_LIMIT_HEADER, String.valueOf(status.getMaxRequests()));
-            response.setHeader(RATE_LIMIT_REMAINING_HEADER, String.valueOf(status.getRemainingRequests()));
-            response.setHeader(RATE_LIMIT_RESET_HEADER, String.valueOf(status.getWindowEnd().toEpochSecond(java.time.ZoneOffset.UTC)));
-        } catch (Exception e) {
-            log.warn("Failed to add rate limit headers", e);
-        }
+        // Rate limiting headers are now handled by controllers that actually enforce rate limits
+        // This method is kept for backward compatibility but does nothing
+        log.debug("Rate limit headers are now handled by individual controllers");
     }
     
     /**
@@ -341,6 +381,54 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         );
         
         response.getWriter().write(errorJson);
+    }
+    
+    /**
+     * INTEGRATION: Record usage statistics asynchronously.
+     */
+    private void recordUsageStatsAsync(String apiKeyId, String userFkId, HttpServletRequest request, RateLimitTier tier) {
+        if (usageStatsService != null && apiKeyId != null) {
+            try {
+                UUID apiKeyUuid = UUID.fromString(apiKeyId);
+                usageStatsService.recordApiKeyUsage(
+                    apiKeyUuid, 
+                    userFkId, 
+                    request.getRequestURI(), 
+                    request.getMethod(), 
+                    getClientIpAddress(request), 
+                    tier
+                );
+            } catch (Exception e) {
+                log.warn("Failed to record usage statistics for API key: {}", apiKeyId, e);
+            }
+        }
+    }
+    
+    /**
+     * INTEGRATION: Log API key request asynchronously.
+     */
+    private void logRequestAsync(String apiKeyId, String userFkId, HttpServletRequest request, 
+                                HttpServletResponse response, boolean success) {
+        if (requestLoggingService != null && apiKeyId != null) {
+            try {
+                requestLoggingService.logApiKeyRequest(apiKeyId, userFkId, request, response, success);
+            } catch (Exception e) {
+                log.warn("Failed to log API key request for key: {}", apiKeyId, e);
+            }
+        }
+    }
+    
+    /**
+     * INTEGRATION: Consume add-on requests asynchronously.
+     */
+    private void consumeAddOnRequestsAsync(String apiKeyId) {
+        if (addOnService != null) {
+            try {
+                addOnService.consumeAddOnRequests(apiKeyId, 1);
+            } catch (Exception e) {
+                log.debug("No add-on requests to consume for API key: {} (this is normal)", apiKeyId);
+            }
+        }
     }
     
     @Override

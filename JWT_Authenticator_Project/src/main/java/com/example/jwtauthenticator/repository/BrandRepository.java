@@ -66,4 +66,13 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     List<Brand> findByCategoryId(Long categoryId);
     List<Brand> findByCategoryIdAndSubCategoryId(Long categoryId, Long subCategoryId);
     Optional<Brand> findByIdAndCategoryIdAndSubCategoryId(Long id, Long categoryId, Long subCategoryId);
+    
+    // Optimized query for /all endpoint - uses batch fetching to avoid N+1 problem
+    @Query("SELECT DISTINCT b FROM Brand b ORDER BY b.createdAt DESC")
+    List<Brand> findAllWithRelations();
+    
+    // Paginated version for better performance with large datasets
+    @Query(value = "SELECT DISTINCT b FROM Brand b ORDER BY b.createdAt DESC",
+           countQuery = "SELECT COUNT(DISTINCT b) FROM Brand b")
+    Page<Brand> findAllWithRelations(Pageable pageable);
 }

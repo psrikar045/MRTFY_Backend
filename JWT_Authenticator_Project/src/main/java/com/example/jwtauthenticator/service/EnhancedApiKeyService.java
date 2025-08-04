@@ -2,24 +2,31 @@ package com.example.jwtauthenticator.service;
 
 import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
 import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
+import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.entity.ApiKey;
+import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.enums.ApiKeyScope;
 import com.example.jwtauthenticator.enums.RateLimitTier;
+import com.example.jwtauthenticator.enums.ApiKeyEnvironment;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.util.ApiKeyHashUtil;
+import com.example.jwtauthenticator.util.DomainExtractionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Enhanced API Key Service with business logic for different key types and scopes.
+ * Enhanced API Key Service with domain-based access control and business logic.
+ * Supports all domain types including .com, .org, .io, .in, .co, etc.
  * This service provides higher-level business operations for API key management.
  */
 @Service
@@ -30,6 +37,15 @@ public class EnhancedApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository;
     private final ApiKeyHashUtil apiKeyHashUtil;
+    private final DomainValidationService domainValidationService;
+    private final DomainManagementService domainManagementService;
+    private final PlanValidationService planValidationService;
+    private final MonthlyUsageTrackingService monthlyUsageService;
+    private final DomainExtractionUtil domainExtractionUtil;
+    
+    private static final SecureRandom secureRandom = new SecureRandom();
+    private static final String API_KEY_PREFIX = "sk-";
+    private static final int API_KEY_LENGTH = 48;
     
     /**
      * Create a standard user API key with basic scopes.
@@ -42,7 +58,7 @@ public class EnhancedApiKeyService {
             .name(keyName)
             .description(description)
             .prefix("sk-")
-            .rateLimitTier(RateLimitTier.BASIC.name())
+            .rateLimitTier(RateLimitTier.FREE_TIER.name())
             .scopes(List.of(
                 ApiKeyScope.READ_USERS.name(),
                 ApiKeyScope.READ_BRANDS.name(),
@@ -89,7 +105,7 @@ public class EnhancedApiKeyService {
             .name(keyName)
             .description(description)
             .prefix("admin-")
-            .rateLimitTier(RateLimitTier.UNLIMITED.name())
+            .rateLimitTier(RateLimitTier.BUSINESS_TIER.name())
             .scopes(List.of(
                 ApiKeyScope.FULL_ACCESS.name()
             ))
@@ -141,11 +157,13 @@ public class EnhancedApiKeyService {
             .name(request.getName())
             .description(request.getDescription())
             .prefix(request.getPrefix())
+            .registeredDomain(request.getRegisteredDomain()) // Add missing registeredDomain field
             .isActive(true)
             .expiresAt(request.getExpiresAt())
             .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
             .allowedDomains(request.getAllowedDomains() != null ? String.join(",", request.getAllowedDomains()) : null)
-            .rateLimitTier(request.getRateLimitTier())
+            .rateLimitTier(request.getRateLimitTier() != null ? 
+                          RateLimitTier.valueOf(request.getRateLimitTier()) : RateLimitTier.FREE_TIER)
             .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
             .build();
             
@@ -215,8 +233,8 @@ public class EnhancedApiKeyService {
     @Transactional
     public boolean upgradeRateLimitTier(UUID keyId, String userId, RateLimitTier newTier) {
         return apiKeyRepository.findByIdAndUserFkId(keyId, userId).map(apiKey -> {
-            String oldTier = apiKey.getRateLimitTier();
-            apiKey.setRateLimitTier(newTier.name());
+            RateLimitTier oldTier = apiKey.getRateLimitTier();
+            apiKey.setRateLimitTier(newTier);
             apiKeyRepository.save(apiKey);
             
             log.info("Upgraded rate limit tier for API key '{}' (ID: {}) from {} to {}", 
@@ -308,6 +326,472 @@ public class EnhancedApiKeyService {
         });
     }
     
+    // --- NEW DOMAIN-BASED METHODS ---
+    
+    /**
+     * Create API key with registered domain (supports all TLD types)
+     */
+    @Transactional
+    public ApiKeyCreateResult createApiKeyWithDomain(String userId, ApiKeyCreateRequestDTO request) {
+        log.info("Creating API key with domain for user: {} - Domain: {}", userId, request.getRegisteredDomain());
+
+        try {
+            // Step 1: Validate user exists
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                return ApiKeyCreateResult.failure("User not found: " + userId, "USER_NOT_FOUND");
+            }
+
+            // Step 2: Validate and normalize domain
+            String normalizedDomain = domainValidationService.normalizeDomain(request.getRegisteredDomain());
+            if (normalizedDomain == null || normalizedDomain.trim().isEmpty()) {
+                return ApiKeyCreateResult.failure("Invalid domain format", "INVALID_DOMAIN_FORMAT");
+            }
+
+            if (!domainValidationService.isValidDomainFormat(normalizedDomain)) {
+                return ApiKeyCreateResult.failure(
+                    "Invalid domain format. Supported formats: xamply.com, xamplyfy.co, xamplyfy.in, etc.",
+                    "INVALID_DOMAIN_FORMAT"
+                );
+            }
+
+            // Step 3: Check domain uniqueness
+            if (apiKeyRepository.existsByRegisteredDomain(normalizedDomain)) {
+                return ApiKeyCreateResult.failure(
+                    "Domain already registered to another API key: " + normalizedDomain,
+                    "DOMAIN_ALREADY_EXISTS"
+                );
+            }
+
+            // Step 4: Check API key name uniqueness for user
+            if (apiKeyRepository.existsByNameAndUserFkId(request.getName(), userId)) {
+                return ApiKeyCreateResult.failure(
+                    "API key name already exists for this user: " + request.getName(),
+                    "NAME_ALREADY_EXISTS"
+                );
+            }
+
+            // Step 5: Generate API key
+            String rawApiKey = apiKeyHashUtil.generateSecureApiKey(request.getPrefix() != null ? request.getPrefix() : "sk-");
+            String keyHash = apiKeyHashUtil.hashApiKey(rawApiKey);
+
+            // Step 6: Create API key entity
+            ApiKey apiKey = ApiKey.builder()
+                .userFkId(userId)
+                .name(request.getName())
+                .description(request.getDescription())
+                .prefix(request.getPrefix() != null ? request.getPrefix() : "sk-")
+                .keyHash(keyHash)
+                .registeredDomain(normalizedDomain)
+                .isActive(true)
+                .expiresAt(request.getExpiresAt())
+                .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
+                .allowedDomains(request.getAllowedDomains() != null ? String.join(",", request.getAllowedDomains()) : null)
+                .rateLimitTier(request.getRateLimitTier() != null ? 
+                              RateLimitTier.valueOf(request.getRateLimitTier()) : RateLimitTier.FREE_TIER)
+                .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
+                .build();
+
+            // Step 7: Save API key
+            ApiKey savedApiKey = apiKeyRepository.save(apiKey);
+
+            log.info("API key created successfully: {} for user: {} with domain: {}", 
+                    savedApiKey.getId(), userId, normalizedDomain);
+
+            return ApiKeyCreateResult.success(savedApiKey, rawApiKey);
+
+        } catch (Exception e) {
+            log.error("Error creating API key for user: {} with domain: {}", userId, request.getRegisteredDomain(), e);
+            return ApiKeyCreateResult.failure("Failed to create API key: " + e.getMessage(), "CREATION_ERROR");
+        }
+    }
+
+    /**
+     * Update API key's registered domain
+     */
+    @Transactional
+    public ApiKeyUpdateResult updateRegisteredDomain(UUID apiKeyId, String userId, String newDomain) {
+        log.info("Updating registered domain for API key: {} - New domain: {}", apiKeyId, newDomain);
+
+        try {
+            // Find API key
+            Optional<ApiKey> apiKeyOpt = apiKeyRepository.findByIdAndUserFkId(apiKeyId, userId);
+            if (apiKeyOpt.isEmpty()) {
+                return ApiKeyUpdateResult.failure("API key not found or access denied", "API_KEY_NOT_FOUND");
+            }
+
+            ApiKey apiKey = apiKeyOpt.get();
+
+            // Validate and normalize new domain
+            String normalizedDomain = domainValidationService.normalizeDomain(newDomain);
+            if (!domainValidationService.isValidDomainFormat(normalizedDomain)) {
+                return ApiKeyUpdateResult.failure("Invalid domain format", "INVALID_DOMAIN_FORMAT");
+            }
+
+            // Check if domain is already taken by another API key
+            Optional<ApiKey> existingApiKey = apiKeyRepository.findByRegisteredDomain(normalizedDomain);
+            if (existingApiKey.isPresent() && !existingApiKey.get().getId().equals(apiKeyId)) {
+                return ApiKeyUpdateResult.failure(
+                    "Domain already registered to another API key",
+                    "DOMAIN_ALREADY_EXISTS"
+                );
+            }
+
+            // Update domain
+            String oldDomain = apiKey.getRegisteredDomain();
+            apiKey.setRegisteredDomain(normalizedDomain);
+            ApiKey updatedApiKey = apiKeyRepository.save(apiKey);
+
+            log.info("API key domain updated successfully: {} - Old: {}, New: {}", 
+                    apiKeyId, oldDomain, normalizedDomain);
+
+            return ApiKeyUpdateResult.success(updatedApiKey);
+
+        } catch (Exception e) {
+            log.error("Error updating domain for API key: {}", apiKeyId, e);
+            return ApiKeyUpdateResult.failure("Failed to update domain: " + e.getMessage(), "UPDATE_ERROR");
+        }
+    }
+
+    /**
+     * Get all API keys for a user with domain information
+     */
+    public List<ApiKeyResponseDTO> getUserApiKeysWithDomains(String userId) {
+        log.debug("Fetching API keys with domains for user: {}", userId);
+
+        List<ApiKey> apiKeys = apiKeyRepository.findByUserFkIdOrderByCreatedAtDesc(userId);
+        return apiKeys.stream()
+                .map(ApiKeyResponseDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Check if domain is available for registration
+     */
+    public boolean isDomainAvailable(String domain) {
+        String normalizedDomain = domainValidationService.normalizeDomain(domain);
+        if (normalizedDomain == null) {
+            return false;
+        }
+
+        return !apiKeyRepository.existsByRegisteredDomain(normalizedDomain);
+    }
+
+    /**
+     * Check if domain is available for a specific API key (for updates)
+     */
+    public boolean isDomainAvailableForApiKey(String domain, UUID excludeApiKeyId) {
+        String normalizedDomain = domainValidationService.normalizeDomain(domain);
+        if (normalizedDomain == null) {
+            return false;
+        }
+
+        Optional<ApiKey> existingApiKey = apiKeyRepository.findByRegisteredDomain(normalizedDomain);
+        return existingApiKey.isEmpty() || existingApiKey.get().getId().equals(excludeApiKeyId);
+    }
+
+    /**
+     * Get domain suggestions for user
+     */
+    public List<String> getDomainSuggestions(String baseDomain) {
+        String normalizedBase = domainValidationService.normalizeDomain(baseDomain);
+        if (normalizedBase == null) {
+            return List.of();
+        }
+
+        // Extract domain name without TLD
+        String[] parts = normalizedBase.split("\\.");
+        if (parts.length < 2) {
+            return List.of();
+        }
+
+        String domainName = parts[0];
+        
+        // Generate suggestions with different TLDs
+        List<String> suggestions = List.of(
+            domainName + ".com",
+            domainName + ".org",
+            domainName + ".io",
+            domainName + ".co",
+            domainName + ".in",
+            domainName + ".net",
+            "api." + normalizedBase,
+            "app." + normalizedBase,
+            "www." + normalizedBase
+        );
+
+        // Filter out already taken domains
+        return suggestions.stream()
+                .filter(this::isDomainAvailable)
+                .limit(5)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Validate domain format and provide suggestions
+     */
+    public DomainValidationInfo validateDomainForRegistration(String domain) {
+        String normalizedDomain = domainValidationService.normalizeDomain(domain);
+        
+        if (normalizedDomain == null || normalizedDomain.trim().isEmpty()) {
+            return new DomainValidationInfo(false, "Domain cannot be empty", List.of());
+        }
+
+        if (!domainValidationService.isValidDomainFormat(normalizedDomain)) {
+            return new DomainValidationInfo(
+                false, 
+                "Invalid domain format. Use format like: xamply.com, xamplyfy.co, xamplyfy.in",
+                getDomainSuggestions(domain)
+            );
+        }
+
+        if (!isDomainAvailable(normalizedDomain)) {
+            return new DomainValidationInfo(
+                false,
+                "Domain already registered to another API key",
+                getDomainSuggestions(domain)
+            );
+        }
+
+        return new DomainValidationInfo(true, "Domain is available", List.of());
+    }
+
+    /**
+     * Create API key with comprehensive plan and domain validation
+     * This is the main method that should be used for all new API key creation
+     */
+    @Transactional
+    public ApiKeyCreateResult createApiKeyWithPlanValidation(ApiKeyCreateRequestDTO request, String userId, 
+                                                           ApiKeyEnvironment environment) {
+        log.info("Creating API key with plan validation for user '{}', domain '{}', environment '{}'", 
+                userId, request.getRegisteredDomain(), environment);
+        
+        try {
+            // Step 1: Get user and validate
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+            
+            // Step 2: Validate plan limits
+            planValidationService.validateApiKeyCreation(user);
+            
+            // Step 3: Process domain with comprehensive validation
+            DomainManagementService.DomainProcessingResult domainResult = 
+                    domainManagementService.processDomainForApiKey(request.getRegisteredDomain(), user, environment);
+            
+            // Step 4: Create API key with processed domain information
+            ApiKey apiKey = buildApiKeyFromRequest(request, user, domainResult, environment);
+            
+            // Step 5: Set rate limit tier - use requested tier if valid, otherwise use user plan
+            RateLimitTier rateLimitTier;
+            if (request.getRateLimitTier() != null && !request.getRateLimitTier().trim().isEmpty()) {
+                try {
+                    RateLimitTier requestedTier = RateLimitTier.valueOf(request.getRateLimitTier().toUpperCase().trim());
+                    // Validate that requested tier is allowed for user's plan
+                    RateLimitTier maxAllowedTier = RateLimitTier.fromUserPlan(user.getPlan());
+                    if (isValidTierForPlan(requestedTier, maxAllowedTier)) {
+                        rateLimitTier = requestedTier;
+                        log.info("Using requested rate limit tier '{}' for user '{}' with plan '{}'", 
+                                requestedTier, user.getId(), user.getPlan());
+                    } else {
+                        rateLimitTier = maxAllowedTier;
+                        log.warn("Requested tier '{}' not allowed for plan '{}', using '{}'", 
+                                requestedTier, user.getPlan(), maxAllowedTier);
+                    }
+                } catch (IllegalArgumentException e) {
+                    rateLimitTier = RateLimitTier.fromUserPlan(user.getPlan());
+                    log.warn("Invalid rate limit tier '{}', using plan-based tier '{}'", 
+                            request.getRateLimitTier(), rateLimitTier);
+                }
+            } else {
+                rateLimitTier = RateLimitTier.fromUserPlan(user.getPlan());
+            }
+            apiKey.setRateLimitTier(rateLimitTier);
+            
+            // Step 6: Generate and hash API key with custom prefix
+            String rawApiKey = generateApiKey(request.getPrefix());
+            String hashedApiKey = apiKeyHashUtil.hashApiKey(rawApiKey);
+            apiKey.setKeyHash(hashedApiKey);
+            
+            // Step 7: Save API key
+            ApiKey savedApiKey = apiKeyRepository.save(apiKey);
+            
+            // Step 8: Initialize monthly usage tracking
+            monthlyUsageService.createMonthlyUsageRecord(
+                    savedApiKey.getId(), 
+                    userId, 
+                    com.example.jwtauthenticator.entity.ApiKeyMonthlyUsage.getCurrentMonthYear(),
+                    user.getPlan()
+            );
+            
+            log.info("✅ API key created successfully: ID={}, Domain={}, Plan={}, Environment={}", 
+                    savedApiKey.getId(), domainResult.getRegisteredDomain(), user.getPlan(), environment);
+            
+            // Add warnings if any
+            if (!domainResult.getWarnings().isEmpty()) {
+                log.info("Domain processing warnings for API key '{}': {}", 
+                        savedApiKey.getId(), domainResult.getWarnings());
+            }
+            
+            return ApiKeyCreateResult.success(savedApiKey, rawApiKey);
+            
+        } catch (Exception e) {
+            log.error("❌ Error creating API key for user '{}': {}", userId, e.getMessage(), e);
+            return ApiKeyCreateResult.failure("Failed to create API key: " + e.getMessage(), "CREATION_ERROR");
+        }
+    }
+    
+    /**
+     * Build API key entity from request and domain processing result
+     */
+    private ApiKey buildApiKeyFromRequest(ApiKeyCreateRequestDTO request, User user, 
+                                        DomainManagementService.DomainProcessingResult domainResult,
+                                        ApiKeyEnvironment environment) {
+        
+        ApiKey apiKey = ApiKey.builder()
+                .name(request.getName())
+                .description(request.getDescription())
+                .prefix(request.getPrefix())
+                .userFkId(user.getId())
+                .registeredDomain(domainResult.getRegisteredDomain())
+                .mainDomain(domainResult.getMainDomain())
+                .subdomainPattern(domainResult.getSubdomainPattern())
+                .environment(environment)
+                .allowedDomains(convertListToString(request.getAllowedDomains()))
+                .allowedIps(convertListToString(request.getAllowedIps()))
+                .scopes(convertListToString(request.getScopes()))
+                .isActive(true)
+                .expiresAt(request.getExpiresAt())
+                .build();
+        
+        // Set default scopes if none provided
+        if (apiKey.getScopes() == null || apiKey.getScopes().trim().isEmpty()) {
+            apiKey.setScopes(getDefaultScopesForPlan(user.getPlan()));
+        }
+        
+        return apiKey;
+    }
+    
+    /**
+     * Get default scopes based on user plan
+     */
+    private String getDefaultScopesForPlan(com.example.jwtauthenticator.enums.UserPlan plan) {
+        return switch (plan) {
+            case FREE -> "READ_BASIC,DOMAIN_HEALTH,READ_BRANDS";
+            case PRO -> "READ_BASIC,READ_ADVANCED,DOMAIN_HEALTH,DOMAIN_INSIGHTS,READ_BRANDS,READ_CATEGORIES,ANALYTICS_READ";
+            case BUSINESS -> "READ_BASIC,READ_ADVANCED,WRITE_BASIC,DOMAIN_HEALTH,DOMAIN_INSIGHTS,AI_SUMMARIES,READ_BRANDS,READ_CATEGORIES,WRITE_BRANDS,ANALYTICS_READ,ANALYTICS_WRITE";
+        };
+    }
+    
+    /**
+     * Check if requested rate limit tier is valid for user's plan
+     */
+    private boolean isValidTierForPlan(RateLimitTier requestedTier, RateLimitTier maxAllowedTier) {
+        // Define tier hierarchy: FREE_TIER < PRO_TIER < BUSINESS_TIER
+        int requestedLevel = getTierLevel(requestedTier);
+        int maxAllowedLevel = getTierLevel(maxAllowedTier);
+        return requestedLevel <= maxAllowedLevel;
+    }
+    
+    /**
+     * Get numeric level for rate limit tier comparison
+     */
+    private int getTierLevel(RateLimitTier tier) {
+        return switch (tier) {
+            case FREE_TIER -> 1;
+            case PRO_TIER -> 2;
+            case BUSINESS_TIER -> 3;
+        };
+    }
+    
+    /**
+     * Check if user can create API key for specific domain
+     */
+    public boolean canUserCreateApiKeyForDomain(String userId, String domain) {
+        try {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) return false;
+            
+            // Check plan limits
+            planValidationService.validateApiKeyCreation(user);
+            planValidationService.validateDomainClaim(user, domain);
+            
+            return true;
+        } catch (Exception e) {
+            log.debug("User '{}' cannot create API key for domain '{}': {}", userId, domain, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get user's current plan usage
+     */
+    public UserPlanUsage getUserPlanUsage(String userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return null;
+        }
+        
+        int currentApiKeys = apiKeyRepository.countByUserFkId(userId);
+        int currentDomains = domainManagementService.getUserClaimedDomains(userId).size();
+        
+        // Set current counts in user for helper methods
+        user.setCurrentApiKeyCount(currentApiKeys);
+        user.setCurrentDomainCount(currentDomains);
+        
+        return UserPlanUsage.builder()
+                .plan(user.getPlan())
+                .currentApiKeys(currentApiKeys)
+                .maxApiKeys(user.getPlan().getMaxApiKeys())
+                .currentDomains(currentDomains)
+                .maxDomains(user.getPlan().getMaxDomains())
+                .remainingApiKeys(user.getRemainingApiKeys())
+                .remainingDomains(user.getRemainingDomains())
+                .canCreateApiKey(user.canCreateApiKey())
+                .canClaimDomain(user.canClaimDomain())
+                .build();
+    }
+    
+    /**
+     * Generate a secure API key
+     */
+    private String generateApiKey() {
+        return generateApiKey(null);
+    }
+    
+    /**
+     * Generate a secure API key with custom prefix
+     */
+    private String generateApiKey(String prefix) {
+        byte[] randomBytes = new byte[API_KEY_LENGTH];
+        secureRandom.nextBytes(randomBytes);
+        
+        // Use custom prefix if provided, otherwise use default
+        String actualPrefix;
+        if (prefix != null && !prefix.trim().isEmpty()) {
+            String cleanPrefix = prefix.trim();
+            actualPrefix = cleanPrefix.endsWith("-") ? cleanPrefix : cleanPrefix + "-";
+        } else {
+            actualPrefix = API_KEY_PREFIX;
+        }
+        
+        StringBuilder apiKey = new StringBuilder(actualPrefix);
+        for (byte b : randomBytes) {
+            apiKey.append(String.format("%02x", b & 0xff));
+        }
+        
+        return apiKey.toString();
+    }
+    
+    /**
+     * Convert list to comma-separated string
+     */
+    private String convertListToString(List<String> list) {
+        if (list == null || list.isEmpty()) {
+            return null;
+        }
+        return String.join(",", list);
+    }
+    
     /**
      * Validate that user exists.
      */
@@ -315,5 +799,101 @@ public class EnhancedApiKeyService {
         if (!userRepository.existsById(userId)) {
             throw new IllegalArgumentException("User with ID " + userId + " not found");
         }
+    }
+    
+    /**
+     * User plan usage information
+     */
+    @lombok.Builder
+    @lombok.Data
+    public static class UserPlanUsage {
+        private com.example.jwtauthenticator.enums.UserPlan plan;
+        private int currentApiKeys;
+        private int maxApiKeys;
+        private int currentDomains;
+        private int maxDomains;
+        private int remainingApiKeys;
+        private int remainingDomains;
+        private boolean canCreateApiKey;
+        private boolean canClaimDomain;
+    }
+
+    // --- RESULT CLASSES ---
+    
+    public static class ApiKeyCreateResult {
+        private final boolean success;
+        private final String errorMessage;
+        private final String errorCode;
+        private final ApiKey apiKey;
+        private final String rawApiKey;
+
+        private ApiKeyCreateResult(boolean success, String errorMessage, String errorCode, 
+                                 ApiKey apiKey, String rawApiKey) {
+            this.success = success;
+            this.errorMessage = errorMessage;
+            this.errorCode = errorCode;
+            this.apiKey = apiKey;
+            this.rawApiKey = rawApiKey;
+        }
+
+        public static ApiKeyCreateResult success(ApiKey apiKey, String rawApiKey) {
+            return new ApiKeyCreateResult(true, null, null, apiKey, rawApiKey);
+        }
+
+        public static ApiKeyCreateResult failure(String errorMessage, String errorCode) {
+            return new ApiKeyCreateResult(false, errorMessage, errorCode, null, null);
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getErrorMessage() { return errorMessage; }
+        public String getErrorCode() { return errorCode; }
+        public ApiKey getApiKey() { return apiKey; }
+        public String getRawApiKey() { return rawApiKey; }
+    }
+
+    public static class ApiKeyUpdateResult {
+        private final boolean success;
+        private final String errorMessage;
+        private final String errorCode;
+        private final ApiKey apiKey;
+
+        private ApiKeyUpdateResult(boolean success, String errorMessage, String errorCode, ApiKey apiKey) {
+            this.success = success;
+            this.errorMessage = errorMessage;
+            this.errorCode = errorCode;
+            this.apiKey = apiKey;
+        }
+
+        public static ApiKeyUpdateResult success(ApiKey apiKey) {
+            return new ApiKeyUpdateResult(true, null, null, apiKey);
+        }
+
+        public static ApiKeyUpdateResult failure(String errorMessage, String errorCode) {
+            return new ApiKeyUpdateResult(false, errorMessage, errorCode, null);
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getErrorMessage() { return errorMessage; }
+        public String getErrorCode() { return errorCode; }
+        public ApiKey getApiKey() { return apiKey; }
+    }
+
+    public static class DomainValidationInfo {
+        private final boolean valid;
+        private final String message;
+        private final List<String> suggestions;
+
+        public DomainValidationInfo(boolean valid, String message, List<String> suggestions) {
+            this.valid = valid;
+            this.message = message;
+            this.suggestions = suggestions;
+        }
+
+        // Getters
+        public boolean isValid() { return valid; }
+        public String getMessage() { return message; }
+        public List<String> getSuggestions() { return suggestions; }
     }
 }

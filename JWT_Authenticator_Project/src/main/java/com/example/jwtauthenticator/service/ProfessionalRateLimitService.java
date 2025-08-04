@@ -3,10 +3,11 @@ package com.example.jwtauthenticator.service;
 import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.ApiKeyUsageStats;
 import com.example.jwtauthenticator.entity.ApiKeyAddOn;
-import com.example.jwtauthenticator.entity.RateLimitTier;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.ApiKeyUsageStatsRepository;
 import com.example.jwtauthenticator.repository.ApiKeyAddOnRepository;
+import com.example.jwtauthenticator.util.RateLimitWindowUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Professional-grade rate limiting service with time-window based limits
@@ -46,7 +48,7 @@ public class ProfessionalRateLimitService {
             }
 
             ApiKey apiKey = apiKeyOpt.get();
-            RateLimitTier tier = RateLimitTier.valueOf(apiKey.getRateLimitTier());
+            RateLimitTier tier = apiKey.getRateLimitTier() != null ? apiKey.getRateLimitTier() : RateLimitTier.FREE_TIER;
             
             // Unlimited tier always allows requests
             if (tier.isUnlimited()) {
@@ -97,7 +99,7 @@ public class ProfessionalRateLimitService {
                     tier,
                     usageStats.getRequestCount(),
                     usageStats.getRemainingRequests(),
-                    getTotalAdditionalRequestsRemaining(apiKeyId, now)
+                    getTotalAdditionalRequestsRemaining(UUID.fromString(apiKeyId), now)
                 );
             }
 
@@ -112,7 +114,7 @@ public class ProfessionalRateLimitService {
                 tier,
                 usageStats.getRequestCount(),
                 usageStats.getRemainingRequests(),
-                getTotalAdditionalRequestsRemaining(apiKeyId, now)
+                getTotalAdditionalRequestsRemaining(UUID.fromString(apiKeyId), now)
             );
 
         } catch (Exception e) {
@@ -126,7 +128,7 @@ public class ProfessionalRateLimitService {
      */
     private ApiKeyUsageStats getCurrentUsageStats(ApiKey apiKey, RateLimitTier tier, LocalDateTime now) {
         Optional<ApiKeyUsageStats> currentStatsOpt = 
-            usageStatsRepository.findCurrentUsageStats(apiKey.getId().toString(), now);
+            usageStatsRepository.findCurrentUsageStats(apiKey.getId(), now);
 
         if (currentStatsOpt.isPresent()) {
             ApiKeyUsageStats stats = currentStatsOpt.get();
@@ -134,18 +136,18 @@ public class ProfessionalRateLimitService {
                 return stats;
             }
             // Current window expired, reset for new window
-            LocalDateTime windowStart = now.truncatedTo(ChronoUnit.HOURS);
-            LocalDateTime windowEnd = windowStart.plusSeconds(tier.getWindowSizeSeconds());
+            LocalDateTime windowStart = RateLimitWindowUtil.getWindowStart(now, tier);
+            LocalDateTime windowEnd = RateLimitWindowUtil.getWindowEnd(windowStart, tier);
             stats.resetForNewWindow(windowStart, windowEnd);
             return stats;
         }
 
-        // Create new usage stats for new window (day-based)
-        LocalDateTime windowStart = now.truncatedTo(ChronoUnit.DAYS);
-        LocalDateTime windowEnd = windowStart.plusSeconds(tier.getWindowSizeSeconds());
+        // Create new usage stats for new window
+        LocalDateTime windowStart = RateLimitWindowUtil.getWindowStart(now, tier);
+        LocalDateTime windowEnd = RateLimitWindowUtil.getWindowEnd(windowStart, tier);
 
         return ApiKeyUsageStats.builder()
-                .apiKeyId(apiKey.getId().toString())
+                .apiKeyId(apiKey.getId())
                 .userFkId(apiKey.getUserFkId())
                 .rateLimitTier(tier)
                 .windowStart(windowStart)
@@ -165,17 +167,17 @@ public class ProfessionalRateLimitService {
     private void updateUsageStatsForUnlimited(ApiKey apiKey, RateLimitTier tier) {
         LocalDateTime now = LocalDateTime.now();
         Optional<ApiKeyUsageStats> currentStatsOpt = 
-            usageStatsRepository.findCurrentUsageStats(apiKey.getId().toString(), now);
+            usageStatsRepository.findCurrentUsageStats(apiKey.getId(), now);
 
         ApiKeyUsageStats stats;
         if (currentStatsOpt.isPresent()) {
             stats = currentStatsOpt.get();
         } else {
-            LocalDateTime windowStart = now.truncatedTo(ChronoUnit.DAYS);
-            LocalDateTime windowEnd = windowStart.plusSeconds(tier.getWindowSizeSeconds());
+            LocalDateTime windowStart = RateLimitWindowUtil.getWindowStart(now, tier);
+            LocalDateTime windowEnd = RateLimitWindowUtil.getWindowEnd(windowStart, tier);
             
             stats = ApiKeyUsageStats.builder()
-                    .apiKeyId(apiKey.getId().toString())
+                    .apiKeyId(apiKey.getId())
                     .userFkId(apiKey.getUserFkId())
                     .rateLimitTier(tier)
                     .windowStart(windowStart)
@@ -197,7 +199,7 @@ public class ProfessionalRateLimitService {
      * Reset rate limit for an API key (admin function)
      */
     @Transactional
-    public void resetRateLimit(String apiKeyId) {
+    public void resetRateLimit(UUID apiKeyId) {
         LocalDateTime now = LocalDateTime.now();
         Optional<ApiKeyUsageStats> currentStatsOpt = 
             usageStatsRepository.findCurrentUsageStats(apiKeyId, now);
@@ -217,15 +219,15 @@ public class ProfessionalRateLimitService {
     /**
      * Get current usage statistics for an API key
      */
-    public Optional<ApiKeyUsageStats> getCurrentUsage(String apiKeyId) {
+    public Optional<ApiKeyUsageStats> getCurrentUsage(UUID apiKeyId) {
         return usageStatsRepository.findCurrentUsageStats(apiKeyId, LocalDateTime.now());
     }
 
     /**
      * Get total additional requests remaining from all active add-ons
      */
-    private int getTotalAdditionalRequestsRemaining(String apiKeyId, LocalDateTime now) {
-        Integer total = addOnRepository.getTotalAdditionalRequestsAvailable(apiKeyId, now);
+    private int getTotalAdditionalRequestsRemaining(UUID apiKeyId, LocalDateTime now) {
+        Integer total = addOnRepository.getTotalAdditionalRequestsAvailable(apiKeyId.toString(), now);
         return total != null ? total : 0;
     }
 

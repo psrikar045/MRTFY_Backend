@@ -4,7 +4,7 @@ import com.example.jwtauthenticator.dto.ApiKeyStatisticsDTO;
 import com.example.jwtauthenticator.dto.SystemStatisticsDTO;
 import com.example.jwtauthenticator.dto.UsageAnalyticsDTO;
 import com.example.jwtauthenticator.entity.ApiKeyUsageStats;
-import com.example.jwtauthenticator.entity.RateLimitTier;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.repository.ApiKeyUsageStatsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -30,7 +31,7 @@ public class ApiKeyStatisticsService {
     /**
      * Get comprehensive statistics for a specific API key
      */
-    public ApiKeyStatisticsDTO getApiKeyStatistics(String apiKeyId, int hours) {
+    public ApiKeyStatisticsDTO getApiKeyStatistics(UUID apiKeyId, int hours) {
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
         
         // Get current usage
@@ -78,7 +79,7 @@ public class ApiKeyStatisticsService {
     /**
      * Get usage analytics with trends and patterns
      */
-    public UsageAnalyticsDTO getUsageAnalytics(String apiKeyId, int days) {
+    public UsageAnalyticsDTO getUsageAnalytics(UUID apiKeyId, int days) {
         LocalDateTime since = LocalDateTime.now().minusDays(days);
         List<ApiKeyUsageStats> stats = usageStatsRepository.getUsageStatsBetween(
             apiKeyId, since, LocalDateTime.now());

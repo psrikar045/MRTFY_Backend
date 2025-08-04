@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * DTO for advanced usage analytics and trends
@@ -17,7 +18,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class UsageAnalyticsDTO {
     
-    private String apiKeyId;
+    private UUID apiKeyId;
     private int periodDays;
     
     // Daily usage data

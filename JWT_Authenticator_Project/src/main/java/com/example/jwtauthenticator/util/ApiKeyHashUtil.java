@@ -43,7 +43,19 @@ public class ApiKeyHashUtil {
         byte[] randomBytes = new byte[KEY_BYTE_LENGTH];
         secureRandom.nextBytes(randomBytes);
         String keySuffix = base64Encoder.encodeToString(randomBytes);
-        return (prefix != null && !prefix.isEmpty() ? prefix : DEFAULT_PREFIX) + keySuffix;
+        
+        // Ensure prefix ends with hyphen for proper formatting
+        String finalPrefix;
+        if (prefix != null && !prefix.trim().isEmpty()) {
+            finalPrefix = prefix.trim();
+            if (!finalPrefix.endsWith("-")) {
+                finalPrefix += "-";
+            }
+        } else {
+            finalPrefix = DEFAULT_PREFIX;
+        }
+        
+        return finalPrefix + keySuffix;
     }
 
     /**

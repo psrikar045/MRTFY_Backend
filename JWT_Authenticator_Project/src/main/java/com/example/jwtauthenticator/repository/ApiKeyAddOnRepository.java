@@ -21,6 +21,32 @@ public interface ApiKeyAddOnRepository extends JpaRepository<ApiKeyAddOn, String
            "AND addon.requestsRemaining > 0 ORDER BY addon.activatedAt ASC")
     List<ApiKeyAddOn> findActiveAddOnsForApiKey(@Param("apiKeyId") String apiKeyId, 
                                                @Param("currentTime") LocalDateTime currentTime);
+    
+    /**
+     * Find active add-ons by API key ID (convenience method)
+     */
+    default List<ApiKeyAddOn> findActiveAddOnsByApiKeyId(String apiKeyId) {
+        return findActiveAddOnsForApiKey(apiKeyId, LocalDateTime.now());
+    }
+    
+    /**
+     * Find active add-ons by API key hash (requires join with api_keys table)
+     */
+    @Query(value = "SELECT a.* FROM api_key_addons a " +
+           "JOIN api_keys ak ON ak.id::text = a.api_key_id " +
+           "WHERE ak.key_hash = :apiKeyHash " +
+           "AND a.is_active = true AND a.expires_at > :currentTime " +
+           "AND a.requests_remaining > 0 ORDER BY a.activated_at ASC", 
+           nativeQuery = true)
+    List<ApiKeyAddOn> findActiveAddOnsByApiKeyHash(@Param("apiKeyHash") String apiKeyHash, 
+                                                  @Param("currentTime") LocalDateTime currentTime);
+    
+    /**
+     * Find active add-ons by API key hash (convenience method)
+     */
+    default List<ApiKeyAddOn> findActiveAddOnsByApiKeyHashNow(String apiKeyHash) {
+        return findActiveAddOnsByApiKeyHash(apiKeyHash, LocalDateTime.now());
+    }
 
     /**
      * Find all add-ons for an API key (including expired/inactive)

@@ -218,6 +218,51 @@ public class ApiKeyAddOnService {
     }
 
     /**
+     * Get total additional requests available from active add-ons for an API key.
+     * This method is used by the RateLimitService for integration.
+     */
+    public int getActiveAdditionalRequests(String apiKeyHash) {
+        // First, we need to find the API key by hash to get the ID
+        // This requires integration with ApiKeyService or a direct repository query
+        try {
+            List<ApiKeyAddOn> activeAddOns = addOnRepository.findActiveAddOnsByApiKeyHash(apiKeyHash, LocalDateTime.now());
+            return activeAddOns.stream()
+                    .mapToInt(ApiKeyAddOn::getRequestsRemaining)
+                    .sum();
+        } catch (Exception e) {
+            log.warn("Error getting active additional requests for API key hash: {}, error: {}", 
+                    apiKeyHash, e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Consume requests from add-on packages when API calls are made.
+     * This should be called after successful API key usage.
+     */
+    @Transactional
+    public boolean consumeAddOnRequests(String apiKeyId, int requestCount) {
+        List<ApiKeyAddOn> activeAddOns = getActiveAddOnsForApiKey(apiKeyId);
+        
+        int remainingToConsume = requestCount;
+        
+        // Consume from add-ons in order (oldest first)
+        for (ApiKeyAddOn addOn : activeAddOns) {
+            if (remainingToConsume <= 0) break;
+            
+            int toConsume = Math.min(remainingToConsume, addOn.getRequestsRemaining());
+            if (addOn.useRequests(toConsume)) {
+                addOnRepository.save(addOn);
+                remainingToConsume -= toConsume;
+                log.debug("Consumed {} requests from add-on {}, remaining: {}", 
+                         toConsume, addOn.getId(), addOn.getRequestsRemaining());
+            }
+        }
+        
+        return remainingToConsume == 0;
+    }
+    
+    /**
      * Calculate potential savings with a recommended package
      */
     private double calculateSavings(int overageRequests, AddOnPackage recommendedPackage) {

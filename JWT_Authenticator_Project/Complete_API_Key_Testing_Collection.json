@@ -1,0 +1,1672 @@
+{
+  "info": {
+    "name": "Complete API Key Management System - All Tiers Testing",
+    "description": "Comprehensive testing collection for API Key functionality including FREE_TIER (100/month), PRO_TIER (1000/month), BUSINESS_TIER (unlimited), and Admin API key features",
+    "version": "3.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token for regular user authentication"
+    },
+    {
+      "key": "admin_jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token for admin user authentication"
+    },
+    {
+      "key": "api_key_id",
+      "value": "",
+      "type": "string",
+      "description": "Generated API key ID for testing"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "User ID for admin operations"
+    },
+    {
+      "key": "generated_api_key",
+      "value": "",
+      "type": "string",
+      "description": "Generated API key value"
+    },
+    {
+      "key": "free_tier_api_key",
+      "value": "",
+      "type": "string",
+      "description": "Free tier API key for testing"
+    },
+    {
+      "key": "pro_tier_api_key",
+      "value": "",
+      "type": "string",
+      "description": "Pro tier API key for testing"
+    },
+    {
+      "key": "business_tier_api_key",
+      "value": "",
+      "type": "string",
+      "description": "Business tier API key for testing"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication Setup",
+      "item": [
+        {
+          "name": "Login Regular User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('jwt_token', response.token);",
+                  "    pm.collectionVariables.set('user_id', response.userId);",
+                  "    console.log('JWT Token set:', response.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"testuser\",\n    \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Admin User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('admin_jwt_token', response.token);",
+                  "    console.log('Admin JWT Token set:', response.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin\",\n    \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. User API Key Management",
+      "item": [
+        {
+          "name": "Get User Plan Usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/plan-usage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "plan-usage"]
+            }
+          }
+        },
+        {
+          "name": "Create FREE_TIER API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('api_key_id', response.id);",
+                  "    pm.collectionVariables.set('free_tier_api_key', response.keyValue);",
+                  "    console.log('Free Tier API Key created:', response.keyValue);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Free Tier API Key\",\n    \"description\": \"Free tier API key for testing standard functionality - 100 requests per month\",\n    \"registeredDomain\": \"freetier.example.com\",\n    \"prefix\": \"free-\",\n    \"rateLimitTier\": \"FREE_TIER\",\n    \"scopes\": [\"READ_USERS\", \"READ_BRANDS\", \"READ_CATEGORIES\"],\n    \"allowedDomains\": [\"localhost\", \"127.0.0.1\"],\n    \"allowedIps\": [\"127.0.0.1\", \"::1\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "production"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create PRO_TIER API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('pro_tier_api_key', response.keyValue);",
+                  "    console.log('Pro Tier API Key created:', response.keyValue);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Pro Tier API Key\",\n    \"description\": \"Pro tier API key for business operations - 1000 requests per month\",\n    \"registeredDomain\": \"protier.business.com\",\n    \"allowedDomains\": [\"api.business.com\", \"staging.business.com\", \"localhost\"],\n    \"allowedIps\": [\"192.168.1.100\", \"10.0.0.50\", \"127.0.0.1\"],\n    \"rateLimitTier\": \"PRO_TIER\",\n    \"scopes\": [\"BUSINESS_READ\", \"BUSINESS_WRITE\", \"READ_USERS\", \"WRITE_USERS\", \"READ_BRANDS\", \"WRITE_BRANDS\"],\n    \"expiresAt\": \"2024-12-31T23:59:59\",\n    \"prefix\": \"pro-\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "production"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create BUSINESS_TIER API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('business_tier_api_key', response.keyValue);",
+                  "    console.log('Business Tier API Key created:', response.keyValue);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Business Tier API Key\",\n    \"description\": \"Business tier API key with unlimited access - unlimited requests per month\",\n    \"registeredDomain\": \"business.enterprise.com\",\n    \"allowedDomains\": [\"localhost\", \"127.0.0.1\", \"postman-echo.com\", \"api.enterprise.com\"],\n    \"allowedIps\": [\"127.0.0.1\", \"::1\", \"192.168.1.0/24\", \"10.0.0.0/8\"],\n    \"rateLimitTier\": \"BUSINESS_TIER\",\n    \"scopes\": [\"FULL_ACCESS\", \"DOMAINLESS_ACCESS\", \"ADMIN_ACCESS\", \"SERVER_ACCESS\", \"BACKEND_API\"],\n    \"prefix\": \"biz-\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "production"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Enhanced API Key (Rivo Platform)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Rivo Enhanced API Key\",\n    \"description\": \"Enhanced API key for Rivo platform with advanced domain-based access control\",\n    \"registeredDomain\": \"rivo.platform.com\",\n    \"allowedDomains\": [\"localhost\", \"127.0.0.1\", \"postman-echo.com\", \"rivo.dev\"],\n    \"allowedIps\": [\"127.0.0.1\", \"::1\", \"192.168.1.0/24\"],\n    \"rateLimitTier\": \"BUSINESS_TIER\",\n    \"scopes\": [\"FULL_ACCESS\", \"DOMAINLESS_ACCESS\", \"RIVO_PLATFORM\", \"ENHANCED_FEATURES\"],\n    \"prefix\": \"rivo-\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/rivo-create-api?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "rivo-create-api"],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "production"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All User API Keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            }
+          }
+        },
+        {
+          "name": "Get API Key by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update API Key",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated API Key Name\",\n    \"description\": \"Updated description with enhanced functionality\",\n    \"rateLimitTier\": \"PRO_TIER\",\n    \"scopes\": [\"READ_USERS\", \"READ_BRANDS\", \"READ_CATEGORIES\", \"WRITE_BRANDS\"],\n    \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Revoke API Key",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}", "revoke"]
+            }
+          }
+        },
+        {
+          "name": "Delete API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Admin API Key Management",
+      "item": [
+        {
+          "name": "Get All API Keys (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "all"]
+            }
+          }
+        },
+        {
+          "name": "Get API Keys for Specific User (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/user/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "user", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create API Key for User (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Admin Created API Key\",\n    \"description\": \"API key created by admin for user testing\",\n    \"registeredDomain\": \"admin.created.com\",\n    \"rateLimitTier\": \"BUSINESS_TIER\",\n    \"scopes\": [\"FULL_ACCESS\", \"ADMIN_CREATED\"],\n    \"prefix\": \"admin-\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/user/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "user", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Revoke API Key (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "{{api_key_id}}", "revoke"]
+            }
+          }
+        },
+        {
+          "name": "Delete API Key (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "{{api_key_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get API Key Usage Statistics (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}/usage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "{{api_key_id}}", "usage"]
+            }
+          }
+        },
+        {
+          "name": "Get System-wide Statistics (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Reset Rate Limit (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}/rate-limit/reset",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "{{api_key_id}}", "rate-limit", "reset"]
+            }
+          }
+        },
+        {
+          "name": "Update API Key Scopes (Admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"scopes\": \"FULL_ACCESS,ADMIN_UPDATED,ENHANCED_PERMISSIONS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/api-keys/{{api_key_id}}/scopes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "api-keys", "{{api_key_id}}", "scopes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. API Key Statistics & Analytics",
+      "item": [
+        {
+          "name": "Get API Key Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/statistics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "statistics"]
+            }
+          }
+        },
+        {
+          "name": "Get Usage Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/analytics/usage?period=monthly&granularity=daily",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "analytics", "usage"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "monthly"
+                },
+                {
+                  "key": "granularity",
+                  "value": "daily"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Request Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}/logs?page=0&size=50&sort=timestamp,desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}", "logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                },
+                {
+                  "key": "sort",
+                  "value": "timestamp,desc"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. API Key Add-Ons & Extensions",
+      "item": [
+        {
+          "name": "Get Available Add-Ons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/add-ons/available",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "add-ons", "available"]
+            }
+          }
+        },
+        {
+          "name": "Purchase Add-On",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"apiKeyId\": \"{{api_key_id}}\",\n    \"addOnType\": \"EXTRA_REQUESTS\",\n    \"quantity\": 1000,\n    \"billingCycle\": \"MONTHLY\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/add-ons/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "add-ons", "purchase"]
+            }
+          }
+        },
+        {
+          "name": "Get API Key Add-Ons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/{{api_key_id}}/add-ons",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "{{api_key_id}}", "add-ons"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Rate Limit Testing",
+      "item": [
+        {
+          "name": "Test FREE_TIER Rate Limit (100/month)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test PRO_TIER Rate Limit (1000/month)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{pro_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test BUSINESS_TIER Rate Limit (Unlimited)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Rapid Fire Test - FREE_TIER (Should Hit Limit)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Rapid Fire Test - PRO_TIER",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{pro_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Rapid Fire Test - BUSINESS_TIER (Unlimited)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Check Rate Limit Headers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check for rate limit headers in response",
+                  "pm.test('Rate limit headers present', function () {",
+                  "    pm.expect(pm.response.headers.has('X-RateLimit-Limit')).to.be.true;",
+                  "    pm.expect(pm.response.headers.has('X-RateLimit-Remaining')).to.be.true;",
+                  "    pm.expect(pm.response.headers.has('X-RateLimit-Tier')).to.be.true;",
+                  "});",
+                  "",
+                  "// Log rate limit info",
+                  "console.log('Rate Limit Info:');",
+                  "console.log('Limit:', pm.response.headers.get('X-RateLimit-Limit'));",
+                  "console.log('Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "console.log('Tier:', pm.response.headers.get('X-RateLimit-Tier'));",
+                  "console.log('Reset:', pm.response.headers.get('X-RateLimit-Reset'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Domain & Security Testing",
+      "item": [
+        {
+          "name": "Test Valid Domain Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://example.com"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test Invalid Domain (Should Fail)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://unauthorized-domain.com"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test IP Restriction (Allowed IP)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "X-Forwarded-For",
+                "value": "127.0.0.1"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test IP Restriction (Blocked IP)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "X-Forwarded-For",
+                "value": "1.2.3.4"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Test READ Scope Permission",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Test WRITE Scope Permission (Should Fail for FREE_TIER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Test User\",\n    \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Test ADMIN Scope Permission (Should Fail for Non-Business)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{pro_tier_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"operation\": \"test_admin_access\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/external/admin-operation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "admin-operation"]
+            }
+          }
+        },
+        {
+          "name": "Test BUSINESS Scope Permission (Should Succeed)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/business-data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "business-data"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Reference Data & Utilities",
+      "item": [
+        {
+          "name": "Get Available Scopes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/scopes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "scopes"]
+            }
+          }
+        },
+        {
+          "name": "Get Rate Limit Tiers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/rate-limit-tiers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "rate-limit-tiers"]
+            }
+          }
+        },
+        {
+          "name": "Check Domain Availability",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/domain/check?domain=testdomain.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "domain", "check"],
+              "query": [
+                {
+                  "key": "domain",
+                  "value": "testdomain.com"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Validate API Key Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"apiKey\": \"{{generated_api_key}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys/validate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Secure API Access Testing (/api/secure)",
+      "item": [
+        {
+          "name": "Secure RivoFetch Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://example.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"https://postman-echo.com/get?test=secure-api\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/secure/rivofetch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "rivofetch"]
+            }
+          }
+        },
+        {
+          "name": "Secure Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://example.com"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/secure/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "health"]
+            }
+          }
+        },
+        {
+          "name": "Test Domain Validation (FREE_TIER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://freetier.example.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"https://postman-echo.com/get?tier=free\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/secure/rivofetch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "rivofetch"]
+            }
+          }
+        },
+        {
+          "name": "Test Domain Validation (PRO_TIER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{pro_tier_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://protier.business.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"https://postman-echo.com/get?tier=pro\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/secure/rivofetch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "rivofetch"]
+            }
+          }
+        },
+        {
+          "name": "Test Domain Validation (BUSINESS_TIER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://business.enterprise.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"https://postman-echo.com/get?tier=business\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/secure/rivofetch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "rivofetch"]
+            }
+          }
+        },
+        {
+          "name": "Test Invalid Domain (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Origin",
+                "value": "https://unauthorized-domain.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"url\": \"https://postman-echo.com/get?test=invalid-domain\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/secure/rivofetch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "secure", "rivofetch"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. External API Testing (/api/external)",
+      "item": [
+        {
+          "name": "Get Users (READ_USERS scope)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Create User (WRITE_USERS scope)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Test User\",\n    \"email\": \"testuser@example.com\",\n    \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/external/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get Brands (READ_BRANDS scope)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        },
+        {
+          "name": "Get Business Data (BUSINESS_READ scope)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/business-data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "business-data"]
+            }
+          }
+        },
+        {
+          "name": "Admin Operation (ADMIN_ACCESS + WRITE_USERS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"operation\": \"bulk_user_update\",\n    \"parameters\": {\n        \"status\": \"active\",\n        \"batch_size\": 100\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/external/admin-operation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "admin-operation"]
+            }
+          }
+        },
+        {
+          "name": "Get API Key Info (READ_API_KEYS scope)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{generated_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/key-info",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "key-info"]
+            }
+          }
+        },
+        {
+          "name": "Test FREE_TIER Scope Limitations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{free_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/business-data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "business-data"]
+            }
+          }
+        },
+        {
+          "name": "Test PRO_TIER Scope Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{pro_tier_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/business-data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "business-data"]
+            }
+          }
+        },
+        {
+          "name": "Test BUSINESS_TIER Full Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{business_tier_api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"operation\": \"system_health_check\",\n    \"level\": \"comprehensive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/external/admin-operation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "admin-operation"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Error Scenarios Testing",
+      "item": [
+        {
+          "name": "Test Invalid Domain Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Invalid Domain Test\",\n    \"description\": \"Testing invalid domain format\",\n    \"registeredDomain\": \"invalid-domain\",\n    \"rateLimitTier\": \"FREE_TIER\",\n    \"scopes\": [\"READ_USERS\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            }
+          }
+        },
+        {
+          "name": "Test Duplicate Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Duplicate Domain Test\",\n    \"description\": \"Testing duplicate domain registration\",\n    \"registeredDomain\": \"freetier.example.com\",\n    \"rateLimitTier\": \"FREE_TIER\",\n    \"scopes\": [\"READ_USERS\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            }
+          }
+        },
+        {
+          "name": "Test Invalid Rate Limit Tier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Invalid Tier Test\",\n    \"description\": \"Testing invalid rate limit tier\",\n    \"registeredDomain\": \"invalidtier.example.com\",\n    \"rateLimitTier\": \"INVALID_TIER\",\n    \"scopes\": [\"READ_USERS\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            }
+          }
+        },
+        {
+          "name": "Test Unauthorized Access",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "api-keys"]
+            }
+          }
+        },
+        {
+          "name": "Test Invalid API Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "invalid-api-key-12345"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/external/brands",
+              "host": ["{{base_url}}"],
+              "path": ["api", "external", "brands"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

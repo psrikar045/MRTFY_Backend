@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Controller for API key usage statistics and analytics
@@ -44,7 +45,8 @@ public class ApiKeyStatisticsController {
             @Parameter(description = "Number of hours to analyze") @RequestParam(defaultValue = "24") int hours) {
         
         log.info("Getting statistics for API key: {} (last {} hours)", apiKeyId, hours);
-        ApiKeyStatisticsDTO statistics = statisticsService.getApiKeyStatistics(apiKeyId, hours);
+        UUID apiKeyUuid = UUID.fromString(apiKeyId);
+        ApiKeyStatisticsDTO statistics = statisticsService.getApiKeyStatistics(apiKeyUuid, hours);
         return ResponseEntity.ok(statistics);
     }
 
@@ -60,7 +62,8 @@ public class ApiKeyStatisticsController {
             @Parameter(description = "Number of days to analyze") @RequestParam(defaultValue = "7") int days) {
         
         log.info("Getting usage analytics for API key: {} (last {} days)", apiKeyId, days);
-        UsageAnalyticsDTO analytics = statisticsService.getUsageAnalytics(apiKeyId, days);
+        UUID apiKeyUuid = UUID.fromString(apiKeyId);
+        UsageAnalyticsDTO analytics = statisticsService.getUsageAnalytics(apiKeyUuid, days);
         return ResponseEntity.ok(analytics);
     }
 

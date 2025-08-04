@@ -1,7 +1,7 @@
 package com.example.jwtauthenticator.dto;
 
 import com.example.jwtauthenticator.entity.ApiKeyUsageStats;
-import com.example.jwtauthenticator.entity.RateLimitTier;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

@@ -23,7 +23,6 @@ import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
 import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.service.AdminApiKeyService;
-import com.example.jwtauthenticator.service.RateLimitService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -48,7 +47,6 @@ import lombok.extern.slf4j.Slf4j;
 public class AdminApiKeyController {
     
     private final AdminApiKeyService adminApiKeyService;
-    private final RateLimitService rateLimitService;
     
     @GetMapping("/all")
     @Operation(

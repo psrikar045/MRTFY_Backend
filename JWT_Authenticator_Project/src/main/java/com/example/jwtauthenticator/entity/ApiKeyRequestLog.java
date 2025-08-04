@@ -53,6 +53,9 @@ public class ApiKeyRequestLog {
     @Column(name = "request_path", length = 500)
     private String requestPath;
 
+    @Column(name = "query_string", length = 1000)
+    private String queryString;
+
     @Column(name = "request_timestamp", nullable = false)
     private LocalDateTime requestTimestamp;
 
@@ -94,6 +97,9 @@ public class ApiKeyRequestLog {
 
     @Column(name = "is_allowed_domain")
     private Boolean isAllowedDomain;
+
+    @Column(name = "success", nullable = false)
+    private Boolean success;
 
     @PrePersist
     protected void onCreate() {
