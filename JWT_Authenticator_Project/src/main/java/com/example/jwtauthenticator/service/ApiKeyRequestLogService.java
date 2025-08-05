@@ -125,6 +125,10 @@ public class ApiKeyRequestLogService {
             boolean isAllowedIp = validateClientIp(apiKey, clientIp);
             boolean isAllowedDomain = validateDomain(apiKey, domain);
 
+            // Determine if the request was successful
+            boolean isSuccessful = (errorMessage == null || errorMessage.trim().isEmpty()) && 
+                                 (responseStatus != null && responseStatus >= 200 && responseStatus < 300);
+
             ApiKeyRequestLog logEntry = ApiKeyRequestLog.builder()
                     .apiKeyId(apiKey.getId())
                     .userFkId(apiKey.getUserFkId())
@@ -140,6 +144,7 @@ public class ApiKeyRequestLogService {
                     .isAllowedIp(isAllowedIp)
                     .isAllowedDomain(isAllowedDomain)
                     .errorMessage(errorMessage)
+                    .success(isSuccessful)
                     .build();
 
             log.info("Built log entry: {}", logEntry);
