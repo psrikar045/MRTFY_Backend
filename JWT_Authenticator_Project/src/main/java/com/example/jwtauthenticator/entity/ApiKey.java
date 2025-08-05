@@ -93,6 +93,10 @@ public class ApiKey {
     @Column(name = "main_domain")
     private String mainDomain; // Extracted main domain (e.g., "xamplyfy.com" from "dev.xamplyfy.com")
     
+    // NEW: Encrypted API key storage for secure retrieval
+    @Column(name = "encrypted_key_value", columnDefinition = "TEXT")
+    private String encryptedKeyValue; // AES-256-GCM encrypted API key using user ID-based key derivation
+    
     @PrePersist
     protected void onCreate() {
         if (this.id == null) {

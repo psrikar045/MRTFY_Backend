@@ -1,28 +1,31 @@
 package com.example.jwtauthenticator.service;
 
-import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
-import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
-import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
-import com.example.jwtauthenticator.entity.ApiKey;
-import com.example.jwtauthenticator.entity.User;
-import com.example.jwtauthenticator.enums.ApiKeyScope;
-import com.example.jwtauthenticator.enums.RateLimitTier;
-import com.example.jwtauthenticator.enums.ApiKeyEnvironment;
-import com.example.jwtauthenticator.repository.ApiKeyRepository;
-import com.example.jwtauthenticator.repository.UserRepository;
-import com.example.jwtauthenticator.util.ApiKeyHashUtil;
-import com.example.jwtauthenticator.util.DomainExtractionUtil;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
+import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
+import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
+import com.example.jwtauthenticator.entity.ApiKey;
+import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.enums.ApiKeyEnvironment;
+import com.example.jwtauthenticator.enums.ApiKeyScope;
+import com.example.jwtauthenticator.enums.RateLimitTier;
+import com.example.jwtauthenticator.repository.ApiKeyRepository;
+import com.example.jwtauthenticator.repository.UserRepository;
+import com.example.jwtauthenticator.util.ApiKeyEncryptionUtil;
+import com.example.jwtauthenticator.util.ApiKeyHashUtil;
+import com.example.jwtauthenticator.util.DomainExtractionUtil;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Enhanced API Key Service with domain-based access control and business logic.
@@ -37,6 +40,7 @@ public class EnhancedApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository;
     private final ApiKeyHashUtil apiKeyHashUtil;
+    private final ApiKeyEncryptionUtil apiKeyEncryptionUtil;
     private final DomainValidationService domainValidationService;
     private final DomainManagementService domainManagementService;
     private final PlanValidationService planValidationService;
@@ -143,23 +147,37 @@ public class EnhancedApiKeyService {
     }
     
     /**
-     * Internal method to create API key with proper hashing.
+     * Internal method to create API key with proper hashing and encryption.
+     * 
+     * SECURITY FLOW:
+     * 1. Generate cryptographically secure API key
+     * 2. Create SHA-256 hash for authentication (irreversible)
+     * 3. Create AES-256-GCM encryption for secure retrieval
+     * 4. Store both hash and encrypted value
+     * 5. Return plain key only once during creation
      */
     private ApiKeyGeneratedResponseDTO createApiKeyInternal(String userId, ApiKeyCreateRequestDTO request) {
-        // Generate secure API key
+        // Step 1: Generate secure API key (SAME KEY for both hash and encryption)
         String generatedKeyValue = apiKeyHashUtil.generateSecureApiKey(request.getPrefix());
+        // Step 2: Create SHA-256 hash for authentication
         String keyHash = apiKeyHashUtil.hashApiKey(generatedKeyValue);
+        
+        // Step 3: Create encrypted version for secure retrieval
+        String encryptedKeyValue = apiKeyEncryptionUtil.encryptApiKey(generatedKeyValue, userId);
+        
+        // Step 4: Generate preview for UI display
         String keyPreview = ApiKey.generateKeyPreview(generatedKeyValue);
         
-        // Build API key entity
+        // Step 5: Build API key entity with both hash and encrypted value
         ApiKey apiKey = ApiKey.builder()
             .userFkId(userId)
-            .keyHash(keyHash)
-            .keyPreview(keyPreview)
+            .keyHash(keyHash)                    // For authentication
+            .encryptedKeyValue(encryptedKeyValue) // For secure retrieval
+            .keyPreview(keyPreview)              // For UI display
             .name(request.getName())
             .description(request.getDescription())
             .prefix(request.getPrefix())
-            .registeredDomain(request.getRegisteredDomain()) // Add missing registeredDomain field
+            .registeredDomain(request.getRegisteredDomain())
             .isActive(true)
             .expiresAt(request.getExpiresAt())
             .allowedIps(request.getAllowedIps() != null ? String.join(",", request.getAllowedIps()) : null)
@@ -171,13 +189,14 @@ public class EnhancedApiKeyService {
             
         ApiKey savedKey = apiKeyRepository.save(apiKey);
         
-        log.info("Created API key '{}' for user '{}' with scopes: {}", 
-                savedKey.getName(), userId, savedKey.getScopes());
+        log.info("Created API key '{}' for user '{}' with scopes: {} (encrypted: {})", 
+                savedKey.getName(), userId, savedKey.getScopes(), 
+                savedKey.getEncryptedKeyValue() != null ? "YES" : "NO");
         
         return ApiKeyGeneratedResponseDTO.builder()
             .id(savedKey.getId())
             .name(savedKey.getName())
-            .keyValue(generatedKeyValue) // Return plain key only once
+            .keyValue(generatedKeyValue) // Return plain key only once during creation
             .build();
     }
     
@@ -308,12 +327,14 @@ public class EnhancedApiKeyService {
             String description = existingKey.getDescription();
             String prefix = existingKey.getPrefix();
             
-            // Create new key value and hash
+            // Create new key value, hash, and encryption
             String newKeyValue = apiKeyHashUtil.generateSecureApiKey(prefix);
             String newKeyHash = apiKeyHashUtil.hashApiKey(newKeyValue);
+            String newEncryptedKeyValue = apiKeyEncryptionUtil.encryptApiKey(newKeyValue, userId);
             
-            // Update the existing key
+            // Update the existing key with both hash and encrypted value
             existingKey.setKeyHash(newKeyHash);
+            existingKey.setEncryptedKeyValue(newEncryptedKeyValue);
             existingKey.setUpdatedAt(LocalDateTime.now());
             
             ApiKey savedKey = apiKeyRepository.save(existingKey);
@@ -619,6 +640,11 @@ public class EnhancedApiKeyService {
             apiKey.setKeyPreview(keyPreview);
             log.info("🔑 Generated key preview: {}", keyPreview);
             
+            // Step 6.2: Encrypt API key for secure storage and retrieval
+            String encryptedKeyValue = apiKeyEncryptionUtil.encryptApiKey(rawApiKey, userId);
+            apiKey.setEncryptedKeyValue(encryptedKeyValue);
+            log.info("🔐 Generated encrypted key value for secure storage");
+            
             // Step 7: Save API key
             ApiKey savedApiKey = apiKeyRepository.save(apiKey);
             
@@ -886,7 +912,6 @@ public class EnhancedApiKeyService {
         public String getErrorCode() { return errorCode; }
         public ApiKey getApiKey() { return apiKey; }
     }
-
     public static class DomainValidationInfo {
         private final boolean valid;
         private final String message;

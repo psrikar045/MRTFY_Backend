@@ -5,7 +5,6 @@ import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.RegisterRequest;
 import com.example.jwtauthenticator.repository.UserRepository;
-import com.example.jwtauthenticator.util.TestDataFactory;
 import com.example.jwtauthenticator.dto.ForgotPasswordRequest;
 import com.example.jwtauthenticator.dto.ResetPasswordConfirmRequest;
 import com.example.jwtauthenticator.dto.CheckUsernameRequest;

@@ -10,8 +10,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.Arrays;
-import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -67,6 +65,10 @@ public class ApiKeyResponseDTO {
     
     @Schema(description = "List of granted scopes/permissions")
     private List<String> scopes;
+    
+    @Schema(description = "Encrypted API key value for frontend decryption", 
+            example = "v1:base64_salt:base64_iv:base64_encrypted:base64_auth_tag")
+    private String encryptedKeyValue;
 
     // Static factory method for converting an ApiKey entity to this DTO
     public static ApiKeyResponseDTO fromEntity(ApiKey apiKey) {
@@ -88,6 +90,7 @@ public class ApiKeyResponseDTO {
                 .allowedDomains(apiKey.getAllowedDomainsAsList())
                 .rateLimitTier(apiKey.getRateLimitTier() != null ? apiKey.getRateLimitTier().name() : null)
                 .scopes(apiKey.getScopesAsList())
+                .encryptedKeyValue(apiKey.getEncryptedKeyValue())
                 .build();
     }
 }

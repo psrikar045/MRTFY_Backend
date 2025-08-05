@@ -7,7 +7,6 @@ import com.example.jwtauthenticator.dto.GoogleSignInRequest;
 import com.example.jwtauthenticator.dto.GoogleUserInfo;
 import com.example.jwtauthenticator.dto.ResetPasswordConfirmRequest;
 import com.example.jwtauthenticator.dto.CheckUsernameRequest;
-import com.example.jwtauthenticator.dto.CheckEmailRequest;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
 import com.example.jwtauthenticator.model.RegisterRequest;
@@ -26,16 +25,13 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.Map;
 import java.util.HashMap;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
