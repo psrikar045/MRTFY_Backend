@@ -212,4 +212,80 @@ public interface ApiKeyRequestLogRepository extends JpaRepository<ApiKeyRequestL
            "WHERE l.apiKeyId = :apiKeyId AND l.requestTimestamp >= :since " +
            "GROUP BY l.clientIp ORDER BY COUNT(l) DESC")
     String findMostActiveClientIp(@Param("apiKeyId") UUID apiKeyId, @Param("since") LocalDateTime since);
+
+    // Additional methods for dashboard functionality
+
+    /**
+     * Count requests by user and time range
+     */
+    long countByUserFkIdAndRequestTimestampBetween(String userFkId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * Count distinct domains by user and time range
+     */
+    @Query("SELECT COUNT(DISTINCT l.domain) FROM ApiKeyRequestLog l " +
+           "WHERE l.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "AND l.requestTimestamp BETWEEN :from AND :to")
+    Integer countDistinctDomainsByUserAndTimeRange(@Param("userFkId") String userFkId, 
+                                                  @Param("from") LocalDateTime from, 
+                                                  @Param("to") LocalDateTime to);
+
+    /**
+     * Count new domains for user in specific month
+     */
+    @Query("SELECT COUNT(DISTINCT l.domain) FROM ApiKeyRequestLog l " +
+           "WHERE l.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "AND TO_CHAR(l.requestTimestamp, 'YYYY-MM') = :monthYear " +
+           "AND NOT EXISTS (" +
+           "    SELECT 1 FROM ApiKeyRequestLog l2 " +
+           "    WHERE l2.domain = l.domain AND l2.userFkId = :userFkId " +
+           "    AND l2.requestTimestamp < DATE_TRUNC('month', TO_DATE(:monthYear, 'YYYY-MM'))" +
+           ")")
+    Integer countNewDomainsForUserInMonth(@Param("userFkId") String userFkId, @Param("monthYear") String monthYear);
+
+    /**
+     * Get success rate for user in time range
+     */
+    @Query("SELECT CASE WHEN COUNT(l) > 0 THEN " +
+           "(CAST(COUNT(CASE WHEN l.success = true THEN 1 END) AS DOUBLE) / CAST(COUNT(l) AS DOUBLE)) * 100.0 " +
+           "ELSE 0.0 END " +
+           "FROM ApiKeyRequestLog l " +
+           "WHERE l.userFkId = :userFkId AND l.requestTimestamp BETWEEN :from AND :to")
+    Double getSuccessRateForUser(@Param("userFkId") String userFkId, 
+                                @Param("from") LocalDateTime from, 
+                                @Param("to") LocalDateTime to);
+
+    /**
+     * Count pending requests for API key (rate limited + failed requests that might retry)
+     */
+    @Query("SELECT COUNT(l) FROM ApiKeyRequestLog l " +
+           "WHERE l.apiKeyId = :apiKeyId AND l.requestTimestamp >= :since " +
+           "AND (l.responseStatus = 429 OR (l.success = false AND l.responseStatus IN (500, 502, 503, 504)))")
+    Long countPendingRequestsForApiKey(@Param("apiKeyId") UUID apiKeyId, @Param("since") LocalDateTime since);
+
+    /**
+     * Count requests by API key and time range
+     */
+    Long countByApiKeyIdAndRequestTimestampBetween(UUID apiKeyId, LocalDateTime start, LocalDateTime end);
+
+    /**
+     * Count requests by API key and time range with success filter
+     */
+    @Query("SELECT COUNT(l) FROM ApiKeyRequestLog l " +
+           "WHERE l.apiKeyId = :apiKeyId AND l.requestTimestamp BETWEEN :start AND :end " +
+           "AND l.success = :success")
+    Long countByApiKeyIdAndRequestTimestampBetweenAndSuccess(@Param("apiKeyId") UUID apiKeyId, 
+                                                           @Param("start") LocalDateTime start, 
+                                                           @Param("end") LocalDateTime end,
+                                                           @Param("success") Boolean success);
+
+    /**
+     * Get average response time for API key in time range
+     */
+    @Query("SELECT AVG(l.responseTimeMs) FROM ApiKeyRequestLog l " +
+           "WHERE l.apiKeyId = :apiKeyId AND l.requestTimestamp BETWEEN :start AND :end " +
+           "AND l.responseTimeMs IS NOT NULL")
+    Double getAverageResponseTimeByApiKeyIdAndRequestTimestampBetween(@Param("apiKeyId") UUID apiKeyId, 
+                                                                     @Param("start") LocalDateTime start, 
+                                                                     @Param("end") LocalDateTime end);
 }
