@@ -9,6 +9,7 @@ import com.example.jwtauthenticator.entity.BrandFont;
 import com.example.jwtauthenticator.entity.BrandImage;
 import com.example.jwtauthenticator.entity.BrandSocialLink;
 import com.example.jwtauthenticator.repository.BrandRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
@@ -127,6 +128,27 @@ public class ForwardService {
         companyData.setEmployees(brand.getEmployees());
         companyData.setWebsite(brand.getWebsite());
         
+        // Set new fields with smart mapping
+        companyData.setCompanySize(brand.getEmployees());
+        companyData.setHeadquarters(brand.getLocation());
+        companyData.setType(brand.getCompanyType());
+        
+        // Parse JSON fields back to lists for performance
+        try {
+            if (brand.getSpecialties() != null && !brand.getSpecialties().trim().isEmpty()) {
+                List<String> specialties = objectMapper.readValue(brand.getSpecialties(), 
+                    new TypeReference<List<String>>() {});
+                companyData.setSpecialties(specialties);
+            }
+            if (brand.getLocations() != null && !brand.getLocations().trim().isEmpty()) {
+                List<String> locations = objectMapper.readValue(brand.getLocations(), 
+                    new TypeReference<List<String>>() {});
+                companyData.setLocations(locations);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to deserialize specialties/locations for brand: {}", brand.getName(), e);
+        }
+        
         // Convert social links
         Map<String, String> socialLinks = new HashMap<>();
         for (BrandSocialLink socialLink : brand.getSocialLinks()) {
@@ -156,6 +178,12 @@ public class ForwardService {
                     break;
                 case BANNER:
                     logoData.setBanner(asset.getOriginalUrl());
+                    break;
+                case LINKEDIN_BANNER:
+                    logoData.setLinkedInBanner(asset.getOriginalUrl());
+                    break;
+                case LINKEDIN_LOGO:
+                    logoData.setLinkedInLogo(asset.getOriginalUrl());
                     break;
             }
         }

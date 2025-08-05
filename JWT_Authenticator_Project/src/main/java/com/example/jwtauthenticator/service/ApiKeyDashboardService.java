@@ -12,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -39,8 +38,7 @@ public class ApiKeyDashboardService {
      * Get dashboard metrics for a specific API key
      * Mixed approach: materialized view + real-time data
      */
-    @Cacheable(value = "apiKeyDashboard", key = "#apiKeyId + '_' + #userId", unless = "#result == null")
-    @Transactional(readOnly = true)
+    @Cacheable(value = "apiKeyDashboard", key = "#apiKeyId + '_' + #userId", unless = "#result == null", cacheManager = "dashboardCacheManager")
     public SingleApiKeyDashboardDTO getApiKeyDashboard(UUID apiKeyId, String userId) {
         log.debug("Fetching dashboard for API key: {} (user: {})", apiKeyId, userId);
 
@@ -379,6 +377,7 @@ public class ApiKeyDashboardService {
     /**
      * Force refresh dashboard data for API key
      */
+    @org.springframework.cache.annotation.CacheEvict(value = "apiKeyDashboard", key = "#apiKeyId + '_' + #userId", cacheManager = "dashboardCacheManager")
     public SingleApiKeyDashboardDTO refreshApiKeyDashboard(UUID apiKeyId, String userId) {
         log.info("Force refreshing dashboard for API key: {} (user: {})", apiKeyId, userId);
         

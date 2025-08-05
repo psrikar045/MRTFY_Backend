@@ -71,7 +71,9 @@ public class BrandAsset {
         SYMBOL, 
         ICON,
         BANNER,
-        IMAGE
+        IMAGE,
+        LINKEDIN_BANNER,
+        LINKEDIN_LOGO
     }
     
     public enum DownloadStatus {

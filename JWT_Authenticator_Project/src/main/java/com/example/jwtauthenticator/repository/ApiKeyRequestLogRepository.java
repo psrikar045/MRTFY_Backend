@@ -216,44 +216,84 @@ public interface ApiKeyRequestLogRepository extends JpaRepository<ApiKeyRequestL
     // Additional methods for dashboard functionality
 
     /**
-     * Count requests by user and time range
+     * Count requests by user and time range (only from user's own API keys)
+     * Optimized with proper JOIN order for performance
      */
-    long countByUserFkIdAndRequestTimestampBetween(String userFkId, LocalDateTime from, LocalDateTime to);
+    @Query("SELECT COUNT(l) FROM ApiKeyRequestLog l " +
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId " +
+           "AND l.requestTimestamp BETWEEN :from AND :to")
+    Long countByUserFkIdAndRequestTimestampBetween(@Param("userFkId") String userFkId, 
+                                                  @Param("from") LocalDateTime from, 
+                                                  @Param("to") LocalDateTime to);
 
     /**
-     * Count distinct domains by user and time range
+     * Count distinct domains by user and time range (only from user's own API keys)
      */
     @Query("SELECT COUNT(DISTINCT l.domain) FROM ApiKeyRequestLog l " +
-           "WHERE l.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId AND l.domain IS NOT NULL " +
            "AND l.requestTimestamp BETWEEN :from AND :to")
     Integer countDistinctDomainsByUserAndTimeRange(@Param("userFkId") String userFkId, 
                                                   @Param("from") LocalDateTime from, 
                                                   @Param("to") LocalDateTime to);
 
     /**
-     * Count new domains for user in specific month
+     * Count new domains for user in specific month (only from user's own API keys)
      */
     @Query("SELECT COUNT(DISTINCT l.domain) FROM ApiKeyRequestLog l " +
-           "WHERE l.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId AND l.domain IS NOT NULL " +
            "AND TO_CHAR(l.requestTimestamp, 'YYYY-MM') = :monthYear " +
            "AND NOT EXISTS (" +
            "    SELECT 1 FROM ApiKeyRequestLog l2 " +
-           "    WHERE l2.domain = l.domain AND l2.userFkId = :userFkId " +
+           "    INNER JOIN ApiKey ak2 ON l2.apiKeyId = ak2.id " +
+           "    WHERE l2.domain = l.domain AND ak2.userFkId = :userFkId " +
            "    AND l2.requestTimestamp < DATE_TRUNC('month', TO_DATE(:monthYear, 'YYYY-MM'))" +
            ")")
     Integer countNewDomainsForUserInMonth(@Param("userFkId") String userFkId, @Param("monthYear") String monthYear);
 
     /**
-     * Get success rate for user in time range
+     * Get success rate for user in time range (only from user's own API keys)
      */
     @Query("SELECT CASE WHEN COUNT(l) > 0 THEN " +
            "(CAST(COUNT(CASE WHEN l.success = true THEN 1 END) AS DOUBLE) / CAST(COUNT(l) AS DOUBLE)) * 100.0 " +
            "ELSE 0.0 END " +
            "FROM ApiKeyRequestLog l " +
-           "WHERE l.userFkId = :userFkId AND l.requestTimestamp BETWEEN :from AND :to")
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId AND l.requestTimestamp BETWEEN :from AND :to")
     Double getSuccessRateForUser(@Param("userFkId") String userFkId, 
                                 @Param("from") LocalDateTime from, 
                                 @Param("to") LocalDateTime to);
+
+    /**
+     * Debug method: Get detailed breakdown of user's domain data for verification
+     * This helps verify that only the user's own API keys are being counted
+     */
+    @Query("SELECT l.domain, l.apiKeyId, ak.userFkId, ak.name as apiKeyName, l.requestTimestamp " +
+           "FROM ApiKeyRequestLog l " +
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "ORDER BY l.requestTimestamp DESC " +
+           "LIMIT 50")
+    List<Object[]> getDebugDomainDataForUser(@Param("userFkId") String userFkId);
+
+    /**
+     * Get distinct domains with first occurrence date for user (for verification)
+     */
+    @Query("SELECT l.domain, MIN(l.requestTimestamp) as firstSeen, COUNT(l) as totalRequests " +
+           "FROM ApiKeyRequestLog l " +
+           "INNER JOIN ApiKey ak ON l.apiKeyId = ak.id " +
+           "WHERE ak.userFkId = :userFkId AND l.domain IS NOT NULL " +
+           "GROUP BY l.domain " +
+           "ORDER BY firstSeen DESC")
+    List<Object[]> getDistinctDomainsWithStatsForUser(@Param("userFkId") String userFkId);
+
+    /**
+     * Verify user's API keys (for debugging data integrity issues)
+     */
+    @Query("SELECT ak.id, ak.name, ak.userFkId FROM ApiKey ak WHERE ak.userFkId = :userFkId")
+    List<Object[]> getUserApiKeys(@Param("userFkId") String userFkId);
 
     /**
      * Count pending requests for API key (rate limited + failed requests that might retry)

@@ -60,32 +60,39 @@ public class BrandCategoryResolutionService {
             return new CategoryResolutionResult(null, null);
         }
 
-        log.debug("Resolving category IDs for industry: {}", industry);
+        String cleanIndustry = industry.trim();
+        log.info("Resolving category IDs for industry: '{}'", cleanIndustry);
 
-        // Step 1: Check if industry matches any category name in brandcategories
-        Optional<BrandCategory> categoryMatch = brandCategoryRepository
-                .findByCategoryNameIgnoreCaseAndIsActive(industry.trim(), true);
+        try {
+            // Step 1: Check if industry matches any category name in brandcategories
+            Optional<BrandCategory> categoryMatch = brandCategoryRepository
+                    .findByCategoryNameIgnoreCaseAndIsActive(cleanIndustry, true);
 
-        if (categoryMatch.isPresent()) {
-            BrandCategory category = categoryMatch.get();
-            log.debug("Found matching category: {} with ID: {}", category.getCategoryName(), category.getId());
-            return new CategoryResolutionResult(category.getId(), null);
+            if (categoryMatch.isPresent()) {
+                BrandCategory category = categoryMatch.get();
+                log.info("Found matching category: '{}' with ID: {}", category.getCategoryName(), category.getId());
+                return new CategoryResolutionResult(category.getId(), null);
+            }
+
+            // Step 2: Check if industry matches any subcategory name in brandsubcategories
+            Optional<BrandSubCategory> subCategoryMatch = brandSubCategoryRepository
+                    .findBySubCategoryNameIgnoreCaseAndIsActive(cleanIndustry, true);
+
+            if (subCategoryMatch.isPresent()) {
+                BrandSubCategory subCategory = subCategoryMatch.get();
+                log.info("Found matching subcategory: '{}' with ID: {} and categoryId: {}", 
+                        subCategory.getSubCategoryName(), subCategory.getId(), subCategory.getCategoryId());
+                return new CategoryResolutionResult(subCategory.getCategoryId(), subCategory.getId());
+            }
+
+            // Step 3: No match found in either table
+            log.warn("No matching category or subcategory found for industry: '{}'", cleanIndustry);
+            return new CategoryResolutionResult(null, null);
+            
+        } catch (Exception e) {
+            log.error("Error resolving category IDs for industry: '{}'", cleanIndustry, e);
+            return new CategoryResolutionResult(null, null);
         }
-
-        // Step 2: Check if industry matches any subcategory name in brandsubcategories
-        Optional<BrandSubCategory> subCategoryMatch = brandSubCategoryRepository
-                .findBySubCategoryNameIgnoreCaseAndIsActive(industry.trim(), true);
-
-        if (subCategoryMatch.isPresent()) {
-            BrandSubCategory subCategory = subCategoryMatch.get();
-            log.debug("Found matching subcategory: {} with ID: {} and categoryId: {}", 
-                    subCategory.getSubCategoryName(), subCategory.getId(), subCategory.getCategoryId());
-            return new CategoryResolutionResult(subCategory.getCategoryId(), subCategory.getId());
-        }
-
-        // Step 3: No match found in either table
-        log.debug("No matching category or subcategory found for industry: {}", industry);
-        return new CategoryResolutionResult(null, null);
     }
 
     /**
@@ -95,18 +102,23 @@ public class BrandCategoryResolutionService {
      */
     public void setCategoryIds(com.example.jwtauthenticator.entity.Brand brand) {
         if (brand == null) {
+            log.warn("Brand is null, cannot set category IDs");
             return;
         }
 
+        log.info("Setting category IDs for brand: '{}' with industry: '{}'", 
+                brand.getName(), brand.getIndustry());
+
         CategoryResolutionResult result = resolveCategoryIds(brand.getIndustry());
+        
+        // Always set the resolved values (even if null)
         brand.setCategoryId(result.getCategoryId());
         brand.setSubCategoryId(result.getSubCategoryId());
         
-        // Always set future columns to null as per requirements
-        brand.setFutureColumn1(null);
-        brand.setFutureColumn2(null);
+        // Note: specialties and locations are now managed by BrandExtractionService
+        // No need to set them to null here as they contain valuable data
 
-        log.debug("Set categoryId: {} and subCategoryId: {} for brand: {}", 
+        log.info("Successfully set categoryId: {} and subCategoryId: {} for brand: '{}'", 
                 result.getCategoryId(), result.getSubCategoryId(), brand.getName());
     }
 }

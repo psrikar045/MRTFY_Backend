@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,7 +17,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
-import java.util.stream.Stream;
 
 /**
  * Service for User Dashboard Cards
@@ -39,8 +37,7 @@ public class UserDashboardService {
      * Get user dashboard cards with caching for performance
      * Mixed approach: try materialized view first, fallback to real-time calculation
      */
-    @Cacheable(value = "userDashboardCards", key = "#userId", unless = "#result == null")
-    @Transactional(readOnly = true)
+    @Cacheable(value = "userDashboardCards", key = "#userId", unless = "#result == null", cacheManager = "dashboardCacheManager")
     public UserDashboardCardsDTO getUserDashboardCards(String userId) {
         log.debug("Fetching dashboard cards for user: {}", userId);
 
@@ -51,7 +48,7 @@ public class UserDashboardService {
 
             if (summaryOpt.isPresent()) {
                 log.debug("Using view data for user: {}", userId);
-                return buildDashboardFromSummary(summaryOpt.get());
+                return buildDashboardFromSummary(userId, summaryOpt.get());
             } else {
                 log.debug("View data not available, calculating real-time for user: {}", userId);
                 return calculateRealTimeDashboard(userId);
@@ -73,7 +70,7 @@ public class UserDashboardService {
     /**
      * Build dashboard from materialized view data (fast path)
      */
-    private UserDashboardCardsDTO buildDashboardFromSummary(UserDashboardSummaryView summary) {
+    private UserDashboardCardsDTO buildDashboardFromSummary(String userId, UserDashboardSummaryView summary) {
         return UserDashboardCardsDTO.builder()
                 .totalApiCalls(buildApiCallsCard(
                     summary.getTotalCalls30Days(),
@@ -88,6 +85,7 @@ public class UserDashboardService {
                     summary.getDomainsAddedPreviousMonth()
                 ))
                 .remainingQuota(buildRemainingQuotaCard(
+                    userId,
                     summary.getRemainingQuotaTotal(),
                     summary.getRemainingQuotaPreviousMonth(),
                     summary.getTotalCalls30Days()
@@ -100,8 +98,10 @@ public class UserDashboardService {
 
     /**
      * Calculate dashboard in real-time using Java 21 Virtual Threads and modern patterns
+     * Optimized for performance with proper query execution monitoring
      */
     private UserDashboardCardsDTO calculateRealTimeDashboard(String userId) {
+        long startTime = System.currentTimeMillis();
         log.debug("Calculating real-time dashboard for user: {} using Virtual Threads", userId);
         
         var now = LocalDateTime.now();
@@ -146,15 +146,58 @@ public class UserDashboardService {
             
             // Wait for all tasks to complete and build dashboard
             var currentCalls = currentCallsTask.join();
+            var previousCalls = previousCallsTask.join();
+            var activeDomains = activeDomainsTask.join();
+            var previousActiveDomains = previousActiveDomainsTask.join();
+            var domainsAddedThisMonth = domainsAddedThisMonthTask.join();
+            var domainsAddedPreviousMonth = domainsAddedPreviousMonthTask.join();
+            var remainingQuota = remainingQuotaTask.join();
+            var previousRemainingQuota = previousRemainingQuotaTask.join();
+            var successRate = successRateTask.join();
+            var totalApiKeys = totalApiKeysTask.join();
+            
+            log.debug("Dashboard calculation results for user {}: currentCalls={}, previousCalls={}, activeDomains={}, previousActiveDomains={}, domainsAddedThisMonth={}, domainsAddedPreviousMonth={}, remainingQuota={}, previousRemainingQuota={}, successRate={}, totalApiKeys={}", 
+                     userId, currentCalls, previousCalls, activeDomains, previousActiveDomains, domainsAddedThisMonth, domainsAddedPreviousMonth, remainingQuota, previousRemainingQuota, successRate, totalApiKeys);
+            
+            // Debug: Verify domain data correctness and user's API keys
+            if (log.isDebugEnabled()) {
+                try {
+                    // First, verify user's API keys
+                    var userApiKeys = requestLogRepository.getUserApiKeys(userId);
+                    log.debug("Debug - User {} has {} API keys:", userId, userApiKeys.size());
+                    userApiKeys.forEach(row -> 
+                        log.debug("  ApiKey ID: {}, Name: {}, UserFkId: {}", row[0], row[1], row[2]));
+                    
+                    // Then check domain data
+                    var debugDomains = requestLogRepository.getDebugDomainDataForUser(userId);
+                    var distinctDomains = requestLogRepository.getDistinctDomainsWithStatsForUser(userId);
+                    
+                    log.debug("Debug - Recent domain requests for user {}: {}", userId, debugDomains.size());
+                    debugDomains.stream().limit(5).forEach(row -> 
+                        log.debug("  Domain: {}, ApiKey: {}, UserFkId: {}, ApiKeyName: {}, Timestamp: {}", 
+                                 row[0], row[1], row[2], row[3], row[4]));
+                    
+                    log.debug("Debug - Distinct domains for user {}: {}", userId, distinctDomains.size());
+                    distinctDomains.forEach(row -> 
+                        log.debug("  Domain: {}, FirstSeen: {}, TotalRequests: {}", 
+                                 row[0], row[1], row[2]));
+                                 
+                } catch (Exception e) {
+                    log.warn("Error getting debug domain info for user {}: {}", userId, e.getMessage());
+                }
+            }
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            log.debug("Dashboard calculation completed for user {} in {}ms", userId, executionTime);
             
             return UserDashboardCardsDTO.builder()
-                    .totalApiCalls(buildApiCallsCard(currentCalls, previousCallsTask.join()))
-                    .activeDomains(buildActiveDomainsCard(activeDomainsTask.join(), previousActiveDomainsTask.join()))
-                    .domainsAdded(buildDomainsAddedCard(domainsAddedThisMonthTask.join(), domainsAddedPreviousMonthTask.join()))
-                    .remainingQuota(buildRemainingQuotaCard(remainingQuotaTask.join(), previousRemainingQuotaTask.join(), currentCalls))
+                    .totalApiCalls(buildApiCallsCard(currentCalls, previousCalls))
+                    .activeDomains(buildActiveDomainsCard(activeDomains, previousActiveDomains))
+                    .domainsAdded(buildDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
+                    .remainingQuota(buildRemainingQuotaCard(userId, remainingQuota, previousRemainingQuota, currentCalls))
                     .lastUpdated(LocalDateTime.now())
-                    .successRate(successRateTask.join())
-                    .totalApiKeys(totalApiKeysTask.join())
+                    .successRate(successRate)
+                    .totalApiKeys(totalApiKeys)
                     .build();
         }
     }
@@ -225,9 +268,9 @@ public class UserDashboardService {
     }
 
     /**
-     * Build Remaining Quota Card
+     * Build Remaining Quota Card with accurate quota calculation
      */
-    private UserDashboardCardsDTO.RemainingQuotaCardDTO buildRemainingQuotaCard(Long remainingQuota, Long previousRemaining, Long currentUsage) {
+    private UserDashboardCardsDTO.RemainingQuotaCardDTO buildRemainingQuotaCard(String userId, Long remainingQuota, Long previousRemaining, Long currentUsage) {
         remainingQuota = remainingQuota != null ? remainingQuota : 0L;
         previousRemaining = previousRemaining != null ? previousRemaining : 0L;
         currentUsage = currentUsage != null ? currentUsage : 0L;
@@ -235,9 +278,28 @@ public class UserDashboardService {
         Double percentageChange = calculatePercentageChange(remainingQuota, previousRemaining);
         String trend = determineTrend(percentageChange);
         
-        // Calculate total quota and usage percentage
-        Long totalQuota = remainingQuota + currentUsage;
-        Double usagePercentage = totalQuota > 0 ? (currentUsage.doubleValue() / totalQuota.doubleValue()) * 100.0 : 0.0;
+        // Get accurate total quota from monthly usage records
+        String currentMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        Long totalQuotaLimit = monthlyUsageRepository.getTotalQuotaLimitForUser(userId, currentMonth);
+        Long totalUsedQuota = monthlyUsageRepository.getTotalUsedQuotaForUser(userId, currentMonth);
+        
+        log.debug("Quota calculation for user {}: remainingQuota={}, currentUsage={}, totalQuotaLimit={}, totalUsedQuota={}", 
+                 userId, remainingQuota, currentUsage, totalQuotaLimit, totalUsedQuota);
+        
+        // Use the more accurate values if available
+        if (totalQuotaLimit != null && totalQuotaLimit > 0) {
+            totalUsedQuota = totalUsedQuota != null ? totalUsedQuota : 0L;
+            remainingQuota = Math.max(0L, totalQuotaLimit - totalUsedQuota);
+            currentUsage = totalUsedQuota;
+            log.debug("Using monthly usage data: totalQuotaLimit={}, totalUsedQuota={}, calculatedRemaining={}", 
+                     totalQuotaLimit, totalUsedQuota, remainingQuota);
+        } else {
+            // Fallback to calculated values
+            totalQuotaLimit = remainingQuota + currentUsage;
+            log.debug("Using fallback calculation: totalQuotaLimit={}", totalQuotaLimit);
+        }
+        
+        Double usagePercentage = totalQuotaLimit > 0 ? (currentUsage.doubleValue() / totalQuotaLimit.doubleValue()) * 100.0 : 0.0;
         
         // Estimate days remaining
         Integer estimatedDays = estimateDaysRemaining(remainingQuota, currentUsage);
@@ -247,7 +309,7 @@ public class UserDashboardService {
                 .remainingQuota(remainingQuota)
                 .percentageChange(percentageChange)
                 .trend(trend)
-                .totalQuota(totalQuota)
+                .totalQuota(totalQuotaLimit)
                 .usedQuota(currentUsage)
                 .usagePercentage(Math.round(usagePercentage * 100.0) / 100.0)
                 .estimatedDaysRemaining(estimatedDays)
@@ -369,9 +431,10 @@ public class UserDashboardService {
     /**
      * Force refresh of dashboard data (clears cache and recalculates)
      */
+    @org.springframework.cache.annotation.CacheEvict(value = "userDashboardCards", key = "#userId", cacheManager = "dashboardCacheManager")
     public UserDashboardCardsDTO refreshUserDashboardCards(String userId) {
         log.info("Force refreshing dashboard cards for user: {}", userId);
-        // Clear cache if using Spring Cache
+        // Cache is automatically evicted by @CacheEvict annotation
         return calculateRealTimeDashboard(userId);
     }
 }

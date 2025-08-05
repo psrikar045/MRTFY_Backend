@@ -50,7 +50,7 @@ public class BrandInfoService {
         this.objectMapper = new ObjectMapper();
     }
 
-    @Cacheable(value = "brandInfo", key = "#query")
+    @Cacheable(value = "brandData", key = "#query", cacheManager = "cacheManager")
     public BrandInfoResponse resolveBrandInfo(String query) {
         log.info("Resolving brand info for query: {}", query);
         

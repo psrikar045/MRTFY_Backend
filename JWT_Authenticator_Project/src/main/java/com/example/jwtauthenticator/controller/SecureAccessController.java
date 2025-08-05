@@ -455,27 +455,24 @@ public class SecureAccessController {
     
     /**
      * Log successful API request and update usage statistics
+     * 
+     * NOTE: Usage counting is handled by ProfessionalRateLimitService.checkRateLimit()
+     * to avoid duplicate counting. This method only handles request logging.
      */
     private void logSuccessfulRequest(HttpServletRequest request, com.example.jwtauthenticator.entity.ApiKey apiKey, 
                                     int responseStatus, long responseTimeMs, String targetUrl) {
         try {
-            // Log request to ApiKeyRequestLog table
+            // Log request to ApiKeyRequestLog table (for audit trail)
             apiKeyRequestLogService.logRequestAsync(request, apiKey, responseStatus, responseTimeMs);
             
-            // Update usage statistics
-            usageStatsService.recordApiKeyUsage(
-                apiKey.getId(), 
-                apiKey.getUserFkId(), 
-                request.getRequestURI(), 
-                request.getMethod(), 
-                getClientIpAddress(request), 
-                apiKey.getRateLimitTier()
-            );
+            // ❌ REMOVED: Duplicate usage tracking - ProfessionalRateLimitService already handles this
+            // usageStatsService.recordApiKeyUsage() - CAUSES DUPLICATE COUNTING
+            // monthlyUsageService.recordApiCall() - CAUSES DUPLICATE COUNTING
             
-            // Update monthly usage tracking
-            monthlyUsageService.recordApiCall(apiKey.getId(), apiKey.getUserFkId(), true);
+            // ✅ Usage statistics are already updated by ProfessionalRateLimitService.checkRateLimit()
+            // which is called before this method (line 193-194 in secureRivoFetch)
             
-            log.info("Successfully logged API request for key: {}", apiKey.getId());
+            log.info("Successfully logged API request for key: {} (usage already tracked by rate limiter)", apiKey.getId());
             
         } catch (Exception e) {
             log.error("Failed to log successful API request for key: {} - Error: {}", apiKey.getId(), e.getMessage(), e);

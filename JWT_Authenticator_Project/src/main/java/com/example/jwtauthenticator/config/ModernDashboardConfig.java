@@ -5,9 +5,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -20,7 +17,6 @@ import java.time.Duration;
 @Configuration
 @EnableAsync
 @EnableScheduling
-@EnableCaching
 @Slf4j
 public class ModernDashboardConfig {
 
@@ -45,26 +41,8 @@ public class ModernDashboardConfig {
         return Executors.newFixedThreadPool(processors);
     }
 
-    /**
-     * Modern Cache Manager with optimized settings
-     * Uses concurrent maps with automatic cleanup
-     */
-    @Bean
-    public CacheManager dashboardCacheManager() {
-        log.info("💾 Configuring Modern Dashboard Cache Manager");
-        
-        var cacheManager = new ConcurrentMapCacheManager(
-            "userDashboardCards",
-            "apiKeyDashboard",
-            "dashboardMetrics",
-            "performanceMetrics"
-        );
-        
-        // Enable statistics and monitoring
-        cacheManager.setAllowNullValues(false);
-        
-        return cacheManager;
-    }
+    // NOTE: Dashboard cache manager is now configured in CacheConfig.java
+    // This avoids bean conflicts and centralizes cache configuration
 
     /**
      * Dashboard Performance Monitor using Java 21 features

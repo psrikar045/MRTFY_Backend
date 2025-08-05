@@ -70,11 +70,11 @@ public class Brand {
     @Column(name = "sub_category_id")
     private Long subCategoryId;
     
-    @Column(name = "future_column_1")
-    private String futureColumn1;
+    @Column(name = "specialties", columnDefinition = "TEXT")
+    private String specialties; // JSON array of specialties
     
-    @Column(name = "future_column_2")
-    private String futureColumn2;
+    @Column(name = "company_locations", columnDefinition = "TEXT")
+    private String locations; // JSON array of locations
     
     // Extraction metadata
     @Column(name = "extraction_time_seconds")

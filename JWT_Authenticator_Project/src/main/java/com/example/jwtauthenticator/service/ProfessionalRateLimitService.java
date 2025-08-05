@@ -31,6 +31,7 @@ public class ProfessionalRateLimitService {
     private final ApiKeyUsageStatsRepository usageStatsRepository;
     private final ApiKeyRepository apiKeyRepository;
     private final ApiKeyAddOnRepository addOnRepository;
+    private final MonthlyUsageTrackingService monthlyUsageService;
 
     /**
      * Check if request is allowed and update usage statistics
@@ -106,6 +107,9 @@ public class ProfessionalRateLimitService {
             // Allow request and update stats
             usageStats.incrementRequestCount();
             usageStatsRepository.save(usageStats);
+            
+            // Also update monthly usage tracking (single source of truth)
+            monthlyUsageService.recordApiCall(apiKey.getId(), apiKey.getUserFkId(), true);
 
             log.debug("Rate limit check passed for API key {}: {}/{} requests used", 
                      apiKeyId, usageStats.getRequestCount(), usageStats.getRequestLimit());
@@ -193,6 +197,9 @@ public class ProfessionalRateLimitService {
 
         stats.incrementRequestCount();
         usageStatsRepository.save(stats);
+        
+        // Also update monthly usage tracking for unlimited tier
+        monthlyUsageService.recordApiCall(apiKey.getId(), apiKey.getUserFkId(), true);
     }
 
     /**

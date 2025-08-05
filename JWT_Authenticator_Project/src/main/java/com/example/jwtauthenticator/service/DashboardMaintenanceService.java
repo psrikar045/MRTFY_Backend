@@ -61,7 +61,8 @@ public class DashboardMaintenanceService {
         try {
             // Use native queries with EntityManager for better performance
             var query = entityManager.createNativeQuery("""
-                SELECT table_name, pg_stat_get_tuples_inserted(c.oid) as inserts,
+                SELECT c.relname as table_name, 
+                       pg_stat_get_tuples_inserted(c.oid) as inserts,
                        pg_stat_get_tuples_updated(c.oid) as updates,
                        pg_stat_get_tuples_deleted(c.oid) as deletes
                 FROM pg_class c 

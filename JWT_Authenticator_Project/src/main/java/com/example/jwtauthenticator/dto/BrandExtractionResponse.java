@@ -47,6 +47,12 @@ public class BrandExtractionResponse {
         
         @JsonProperty("Banner")
         private String banner;
+        
+        @JsonProperty("LinkedInBanner")
+        private String linkedInBanner;
+        
+        @JsonProperty("LinkedInLogo")
+        private String linkedInLogo;
     }
     
     @Data
@@ -106,6 +112,21 @@ public class BrandExtractionResponse {
         
         @JsonProperty("LinkedInError")
         private String linkedInError;
+        
+        @JsonProperty("CompanySize")
+        private String companySize;
+        
+        @JsonProperty("Headquarters")
+        private String headquarters;
+        
+        @JsonProperty("Type")
+        private String type;
+        
+        @JsonProperty("Specialties")
+        private List<String> specialties;
+        
+        @JsonProperty("Locations")
+        private List<String> locations;
     }
     
     @Data

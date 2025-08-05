@@ -94,20 +94,45 @@ public class BrandExtractionService {
                 .needsUpdate(false)
                 .build();
         
-        // Set company data
+        // Set company data with cleaning and new field handling
         if (response.getCompany() != null) {
             BrandExtractionResponse.CompanyData company = response.getCompany();
             brand.setName(StringUtils.hasText(company.getName()) ? company.getName() : extractDomainFromUrl(url));
-            brand.setDescription(company.getDescription());
+            brand.setDescription(cleanDescription(company.getDescription()));
             brand.setIndustry(company.getIndustry());
-            brand.setLocation(company.getLocation());
-            brand.setFounded(company.getFounded());
-            brand.setCompanyType(company.getCompanyType());
-            brand.setEmployees(company.getEmployees());
             
-            // Use company website if available, otherwise use the original URL
+            // Handle location with preference for Headquarters
+            String location = StringUtils.hasText(company.getHeadquarters()) ? 
+                company.getHeadquarters() : company.getLocation();
+            brand.setLocation(location);
+            
+            brand.setFounded(company.getFounded());
+            
+            // Handle company type with preference for Type field
+            String companyType = StringUtils.hasText(company.getType()) ? 
+                company.getType() : company.getCompanyType();
+            brand.setCompanyType(companyType);
+            
+            // Handle employees with preference for CompanySize
+            String employees = StringUtils.hasText(company.getCompanySize()) ? 
+                company.getCompanySize() : company.getEmployees();
+            brand.setEmployees(employees);
+            
+            // Use cleaned company website if available, otherwise use the original URL
             if (StringUtils.hasText(company.getWebsite())) {
-                brand.setWebsite(company.getWebsite());
+                brand.setWebsite(cleanWebsiteUrl(company.getWebsite()));
+            }
+            
+            // Handle new fields - store as JSON strings for performance
+            try {
+                if (company.getSpecialties() != null && !company.getSpecialties().isEmpty()) {
+                    brand.setSpecialties(objectMapper.writeValueAsString(company.getSpecialties()));
+                }
+                if (company.getLocations() != null && !company.getLocations().isEmpty()) {
+                    brand.setLocations(objectMapper.writeValueAsString(company.getLocations()));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to serialize specialties/locations for brand: {}", brand.getName(), e);
             }
         } else {
             brand.setName(extractDomainFromUrl(url));
@@ -119,7 +144,15 @@ public class BrandExtractionService {
         }
         
         // Resolve and set category IDs based on industry
-        brandCategoryResolutionService.setCategoryIds(brand);
+        try {
+            brandCategoryResolutionService.setCategoryIds(brand);
+            log.info("Category resolution completed for brand: '{}' - categoryId: {}, subCategoryId: {}", 
+                    brand.getName(), brand.getCategoryId(), brand.getSubCategoryId());
+        } catch (Exception e) {
+            log.error("Failed to resolve category IDs for brand: '{}' with industry: '{}'", 
+                    brand.getName(), brand.getIndustry(), e);
+            // Continue processing even if category resolution fails
+        }
         
         // Save brand first to get ID
         brand = brandRepository.save(brand);
@@ -141,29 +174,62 @@ public class BrandExtractionService {
         existingBrand.setFreshnessScore(100); // Reset freshness score
         existingBrand.setNeedsUpdate(false);
         
-        // Update company data if available
+        // Update company data if available with cleaning and new field handling
         if (response.getCompany() != null) {
             BrandExtractionResponse.CompanyData company = response.getCompany();
             if (StringUtils.hasText(company.getName())) {
                 existingBrand.setName(company.getName());
             }
             if (StringUtils.hasText(company.getDescription())) {
-                existingBrand.setDescription(company.getDescription());
+                existingBrand.setDescription(cleanDescription(company.getDescription()));
             }
             if (StringUtils.hasText(company.getIndustry())) {
                 existingBrand.setIndustry(company.getIndustry());
             }
-            if (StringUtils.hasText(company.getLocation())) {
-                existingBrand.setLocation(company.getLocation());
+            
+            // Handle location with preference for Headquarters
+            String location = StringUtils.hasText(company.getHeadquarters()) ? 
+                company.getHeadquarters() : company.getLocation();
+            if (StringUtils.hasText(location)) {
+                existingBrand.setLocation(location);
             }
+            
             if (StringUtils.hasText(company.getFounded())) {
                 existingBrand.setFounded(company.getFounded());
             }
-            if (StringUtils.hasText(company.getCompanyType())) {
-                existingBrand.setCompanyType(company.getCompanyType());
+            
+            // Handle company type with preference for Type field
+            String companyType = StringUtils.hasText(company.getType()) ? 
+                company.getType() : company.getCompanyType();
+            if (StringUtils.hasText(companyType)) {
+                existingBrand.setCompanyType(companyType);
             }
-            if (StringUtils.hasText(company.getEmployees())) {
-                existingBrand.setEmployees(company.getEmployees());
+            
+            // Handle employees with preference for CompanySize
+            String employees = StringUtils.hasText(company.getCompanySize()) ? 
+                company.getCompanySize() : company.getEmployees();
+            if (StringUtils.hasText(employees)) {
+                existingBrand.setEmployees(employees);
+            }
+            
+            // Update website if available and cleaned
+            if (StringUtils.hasText(company.getWebsite())) {
+                String cleanedWebsite = cleanWebsiteUrl(company.getWebsite());
+                if (StringUtils.hasText(cleanedWebsite)) {
+                    existingBrand.setWebsite(cleanedWebsite);
+                }
+            }
+            
+            // Handle new fields - store as JSON strings for performance
+            try {
+                if (company.getSpecialties() != null && !company.getSpecialties().isEmpty()) {
+                    existingBrand.setSpecialties(objectMapper.writeValueAsString(company.getSpecialties()));
+                }
+                if (company.getLocations() != null && !company.getLocations().isEmpty()) {
+                    existingBrand.setLocations(objectMapper.writeValueAsString(company.getLocations()));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to serialize specialties/locations for brand: {}", existingBrand.getName(), e);
             }
         }
         
@@ -173,7 +239,15 @@ public class BrandExtractionService {
         }
         
         // Re-resolve category IDs in case industry was updated
-        brandCategoryResolutionService.setCategoryIds(existingBrand);
+        try {
+            brandCategoryResolutionService.setCategoryIds(existingBrand);
+            log.info("Category resolution updated for existing brand: '{}' - categoryId: {}, subCategoryId: {}", 
+                    existingBrand.getName(), existingBrand.getCategoryId(), existingBrand.getSubCategoryId());
+        } catch (Exception e) {
+            log.error("Failed to resolve category IDs for existing brand: '{}' with industry: '{}'", 
+                    existingBrand.getName(), existingBrand.getIndustry(), e);
+            // Continue processing even if category resolution fails
+        }
         
         // Clear existing related data and add new data
         // Note: Due to cascade = CascadeType.ALL and orphanRemoval = true, 
@@ -206,6 +280,12 @@ public class BrandExtractionService {
             }
             if (StringUtils.hasText(logo.getBanner())) {
                 brand.addAsset(createBrandAsset(logo.getBanner(), BrandAsset.AssetType.BANNER));
+            }
+            if (StringUtils.hasText(logo.getLinkedInBanner())) {
+                brand.addAsset(createBrandAsset(logo.getLinkedInBanner(), BrandAsset.AssetType.LINKEDIN_BANNER));
+            }
+            if (StringUtils.hasText(logo.getLinkedInLogo())) {
+                brand.addAsset(createBrandAsset(logo.getLinkedInLogo(), BrandAsset.AssetType.LINKEDIN_LOGO));
             }
         }
     }
@@ -413,6 +493,41 @@ public class BrandExtractionService {
         } catch (Exception e) {
             return "unknown_file";
         }
+    }
+    
+    /**
+     * Clean website URL by removing extra text and formatting
+     */
+    private String cleanWebsiteUrl(String website) {
+        if (website == null || website.trim().isEmpty()) {
+            return null;
+        }
+        
+        // Remove extra text after newlines and clean up
+        String cleaned = website.split("\n")[0].trim();
+        
+        // Remove common suffixes that appear in LinkedIn data
+        cleaned = cleaned.replaceAll("\\s*External link.*$", "");
+        cleaned = cleaned.replaceAll("\\s*for\\s+.*$", "");
+        
+        return cleaned.trim();
+    }
+    
+    /**
+     * Clean description by removing excessive whitespace and formatting
+     */
+    private String cleanDescription(String description) {
+        if (description == null || description.trim().isEmpty()) {
+            return null;
+        }
+        
+        return description
+            .replaceAll("\\n\\s*\\n", "\n\n") // Replace multiple newlines with double newline
+            .replaceAll("\\n\\s+", "\n") // Remove spaces after newlines
+            .replaceAll("\\s+", " ") // Replace multiple spaces with single space
+            .replaceAll("\\s*Website\\s*", "") // Remove standalone "Website" text
+            .replaceAll("\\s*External link.*?\\s*", "") // Remove external link references
+            .trim();
     }
     
     /**

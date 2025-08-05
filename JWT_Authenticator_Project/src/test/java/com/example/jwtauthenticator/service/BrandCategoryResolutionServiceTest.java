@@ -167,8 +167,6 @@ class BrandCategoryResolutionServiceTest {
         // Then
         assertEquals(1L, brand.getCategoryId());
         assertNull(brand.getSubCategoryId());
-        assertNull(brand.getFutureColumn1());
-        assertNull(brand.getFutureColumn2());
     }
 
     @Test

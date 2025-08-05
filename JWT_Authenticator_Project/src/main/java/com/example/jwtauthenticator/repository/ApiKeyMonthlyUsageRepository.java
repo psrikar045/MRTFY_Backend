@@ -136,4 +136,18 @@ public interface ApiKeyMonthlyUsageRepository extends JpaRepository<ApiKeyMonthl
     @Query("SELECT COALESCE(SUM(CASE WHEN u.quotaLimit > 0 THEN GREATEST(0, u.quotaLimit - u.totalCalls) ELSE 0 END), 0) " +
            "FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
     Long getTotalRemainingQuotaForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
+
+    /**
+     * Get total quota limit for user in specific month
+     */
+    @Query("SELECT COALESCE(SUM(CASE WHEN u.quotaLimit > 0 THEN u.quotaLimit ELSE 1000 END), 1000) " +
+           "FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
+    Long getTotalQuotaLimitForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
+
+    /**
+     * Get total used quota for user in specific month
+     */
+    @Query("SELECT COALESCE(SUM(u.totalCalls), 0) " +
+           "FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
+    Long getTotalUsedQuotaForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
 }
