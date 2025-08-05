@@ -1,10 +1,15 @@
 package com.example.jwtauthenticator.service;
 
-import com.example.jwtauthenticator.entity.User;
-import com.example.jwtauthenticator.repository.UserRepository;
-import com.example.jwtauthenticator.util.TestDataFactory;
-import com.example.jwtauthenticator.dto.UserResponseDTO;
-import com.example.jwtauthenticator.dto.UserProfileUpdateRequestDTO;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,15 +19,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.Optional;
-import java.util.UUID;
-import java.util.Arrays;
-import java.util.List;
+import com.example.jwtauthenticator.dto.UserProfileUpdateRequestDTO;
+import com.example.jwtauthenticator.dto.UserResponseDTO;
+import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.repository.UserRepository;
+import com.example.jwtauthenticator.util.TestDataFactory;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {

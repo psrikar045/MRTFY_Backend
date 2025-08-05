@@ -149,11 +149,13 @@ public class EnhancedApiKeyService {
         // Generate secure API key
         String generatedKeyValue = apiKeyHashUtil.generateSecureApiKey(request.getPrefix());
         String keyHash = apiKeyHashUtil.hashApiKey(generatedKeyValue);
+        String keyPreview = ApiKey.generateKeyPreview(generatedKeyValue);
         
         // Build API key entity
         ApiKey apiKey = ApiKey.builder()
             .userFkId(userId)
             .keyHash(keyHash)
+            .keyPreview(keyPreview)
             .name(request.getName())
             .description(request.getDescription())
             .prefix(request.getPrefix())
@@ -612,6 +614,11 @@ public class EnhancedApiKeyService {
             String hashedApiKey = apiKeyHashUtil.hashApiKey(rawApiKey);
             apiKey.setKeyHash(hashedApiKey);
             
+            // Step 6.1: Generate and store key preview for display purposes
+            String keyPreview = ApiKey.generateKeyPreview(rawApiKey);
+            apiKey.setKeyPreview(keyPreview);
+            log.info("🔑 Generated key preview: {}", keyPreview);
+            
             // Step 7: Save API key
             ApiKey savedApiKey = apiKeyRepository.save(apiKey);
             
@@ -761,7 +768,7 @@ public class EnhancedApiKeyService {
     /**
      * Generate a secure API key with custom prefix
      */
-    private String generateApiKey(String prefix) {
+    public String generateApiKey(String prefix) {
         byte[] randomBytes = new byte[API_KEY_LENGTH];
         secureRandom.nextBytes(randomBytes);
         

@@ -30,6 +30,9 @@ public class ApiKey {
 
     @Column(name = "key_hash", unique = true, nullable = false, length = 255)
     private String keyHash; // Store SHA-256 hash of the actual key
+    
+    @Column(name = "key_preview", length = 50)
+    private String keyPreview; // Masked preview for display (e.g., "sk-1234...cdef")
 
     // --- UPDATED: userId type is String, and column name matches the FK ---
     @Column(name = "user_fk_id", nullable = false, length = 11) // Matches public.users.id (varchar(11))
@@ -173,6 +176,55 @@ public class ApiKey {
      */
     public boolean isValid() {
         return isActive && !isExpired() && revokedAt == null;
+    }
+    
+    /**
+     * Generate a masked preview of an API key for display purposes
+     * Shows prefix + first 4 chars + "..." + last 4 chars
+     * Example: "sk-1234...cdef"
+     * 
+     * @param plainApiKey the plain text API key (only available during creation)
+     * @return masked preview string
+     */
+    public static String generateKeyPreview(String plainApiKey) {
+        if (plainApiKey == null || plainApiKey.length() < 8) {
+            return "****...****";
+        }
+        
+        // Find the prefix (everything before the first alphanumeric part)
+        int prefixEnd = 0;
+        for (int i = 0; i < plainApiKey.length(); i++) {
+            if (Character.isLetterOrDigit(plainApiKey.charAt(i))) {
+                prefixEnd = i;
+                break;
+            }
+        }
+        
+        String prefix = plainApiKey.substring(0, prefixEnd);
+        String keyPart = plainApiKey.substring(prefixEnd);
+        
+        if (keyPart.length() < 8) {
+            return prefix + "****...****";
+        }
+        
+        String firstPart = keyPart.substring(0, 4);
+        String lastPart = keyPart.substring(keyPart.length() - 4);
+        
+        return prefix + firstPart + "..." + lastPart;
+    }
+    
+    /**
+     * Get the stored key preview or generate a fallback
+     */
+    public String getDisplayPreview() {
+        if (keyPreview != null && !keyPreview.trim().isEmpty()) {
+            return keyPreview;
+        }
+        // Fallback if no preview stored
+        if (prefix != null && !prefix.trim().isEmpty()) {
+            return prefix + "****...****";
+        }
+        return "****...****";
     }
     
     /**

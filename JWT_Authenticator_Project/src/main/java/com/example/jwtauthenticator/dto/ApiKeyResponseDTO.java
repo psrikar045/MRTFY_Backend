@@ -31,6 +31,10 @@ public class ApiKeyResponseDTO {
     @Schema(description = "Prefix for the API key")
     private String prefix;
     
+    @Schema(description = "Masked preview of the API key (for identification only)", 
+            example = "sk-1234...cdef")
+    private String keyPreview;
+    
     @Schema(description = "Whether the API key is active")
     private boolean isActive;
     
@@ -71,6 +75,7 @@ public class ApiKeyResponseDTO {
                 .name(apiKey.getName())
                 .description(apiKey.getDescription())
                 .prefix(apiKey.getPrefix())
+                .keyPreview(apiKey.getDisplayPreview())
                 .isActive(apiKey.isActive())
                 .registeredDomain(apiKey.getRegisteredDomain()) // NEW: Include registered domain
                 .expiresAt(apiKey.getExpiresAt())

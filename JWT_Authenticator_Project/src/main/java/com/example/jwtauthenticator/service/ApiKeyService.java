@@ -192,6 +192,28 @@ public class ApiKeyService {
         }).orElse(false);
     }
 
+    /**
+     * Enhanced revoke method that returns API key information before revoking
+     */
+    @Transactional
+    public Optional<ApiKey> revokeApiKeyWithDetails(UUID keyId, String userFkId) {
+        return apiKeyRepository.findByIdAndUserFkId(keyId, userFkId).map(key -> {
+            // Create a copy of the key data before modification
+            ApiKey keyInfo = new ApiKey();
+            keyInfo.setId(key.getId());
+            keyInfo.setName(key.getName());
+            keyInfo.setPrefix(key.getPrefix());
+            keyInfo.setActive(key.isActive());
+            
+            // Now perform the revocation
+            key.setActive(false);
+            key.setRevokedAt(LocalDateTime.now());
+            apiKeyRepository.save(key);
+            
+            return keyInfo;
+        });
+    }
+
     @Transactional
     public boolean deleteApiKey(UUID keyId, String userFkId) {
         Optional<ApiKey> apiKey = apiKeyRepository.findByIdAndUserFkId(keyId, userFkId); // Use updated method
@@ -200,6 +222,30 @@ public class ApiKeyService {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Enhanced delete method that returns API key information before deleting
+     */
+    @Transactional
+    public Optional<ApiKey> deleteApiKeyWithDetails(UUID keyId, String userFkId) {
+        Optional<ApiKey> apiKey = apiKeyRepository.findByIdAndUserFkId(keyId, userFkId);
+        if (apiKey.isPresent()) {
+            ApiKey key = apiKey.get();
+            
+            // Create a copy of the key data before deletion
+            ApiKey keyInfo = new ApiKey();
+            keyInfo.setId(key.getId());
+            keyInfo.setName(key.getName());
+            keyInfo.setPrefix(key.getPrefix());
+            keyInfo.setActive(key.isActive());
+            
+            // Now perform the deletion
+            apiKeyRepository.delete(key);
+            
+            return Optional.of(keyInfo);
+        }
+        return Optional.empty();
     }
 
     /**

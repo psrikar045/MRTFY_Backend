@@ -4,8 +4,11 @@ import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
 import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyResponseDTO;
 import com.example.jwtauthenticator.dto.ApiKeyUpdateRequestDTO;
+import com.example.jwtauthenticator.dto.ApiKeyOperationResponseDTO;
 import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.enums.ApiKeyEnvironment;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.exception.PlanLimitExceededException;
 import com.example.jwtauthenticator.exception.DomainValidationException;
 import com.example.jwtauthenticator.repository.UserRepository;
@@ -67,6 +70,8 @@ public class ApiKeyController {
     private final EnhancedApiKeyService enhancedApiKeyService;
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final com.example.jwtauthenticator.repository.ApiKeyRepository apiKeyRepository;
+    private final com.example.jwtauthenticator.util.ApiKeyHashUtil apiKeyHashUtil;
     
     // INTEGRATION: Add new services for comprehensive API key functionality
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -350,45 +355,175 @@ public class ApiKeyController {
     @PatchMapping("/{keyId}/revoke") // Using PATCH for partial update/state change
     @Operation(
             summary = "Revoke an API Key",
-            description = "Deactivates and marks an API key as revoked, preventing its future use.",
+            description = "Deactivates and marks an API key as revoked, preventing its future use. " +
+                          "Returns detailed information about the revoked API key.",
             security = { @SecurityRequirement(name = "Bearer Authentication") }
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "API Key revoked successfully"),
-            @ApiResponse(responseCode = "404", description = "API Key not found or does not belong to user"),
+            @ApiResponse(responseCode = "200", description = "API Key revoked successfully",
+                        content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ApiKeyOperationResponseDTO.class)
+                        )),
+            @ApiResponse(responseCode = "404", description = "API Key not found or does not belong to user",
+                        content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ApiKeyOperationResponseDTO.class)
+                        )),
             @ApiResponse(responseCode = "401", description = "Unauthorized - User not authenticated")
     })
-    public ResponseEntity<Void> revokeApiKey(
+    public ResponseEntity<ApiKeyOperationResponseDTO> revokeApiKey(
             @Parameter(description = "UUID of the API Key to revoke", required = true)
             @PathVariable UUID keyId,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userFkId = getCurrentUserId(userDetails);
         log.info("User {} revoking API key with ID: {}", userFkId, keyId);
-        boolean revoked = apiKeyService.revokeApiKey(keyId, userFkId);
-        return revoked ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        
+        Optional<ApiKey> revokedKey = apiKeyService.revokeApiKeyWithDetails(keyId, userFkId);
+        
+        if (revokedKey.isPresent()) {
+            ApiKey key = revokedKey.get();
+            ApiKeyOperationResponseDTO response = ApiKeyOperationResponseDTO.revokeSuccess(
+                key.getId(), 
+                key.getName(), 
+                key.getPrefix()
+            );
+            log.info("✅ API key revoked successfully for user '{}': ID={}, Name={}", 
+                    userFkId, key.getId(), key.getName());
+            return ResponseEntity.ok(response);
+        } else {
+            ApiKeyOperationResponseDTO response = ApiKeyOperationResponseDTO.notFound(keyId, "REVOKE");
+            log.warn("❌ API Key with ID {} not found for user {} for revocation.", keyId, userFkId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
     }
 
     @DeleteMapping("/{keyId}")
     @Operation(
             summary = "Delete an API Key",
-            description = "Permanently deletes an API key belonging to the authenticated user.",
+            description = "Permanently deletes an API key belonging to the authenticated user. " +
+                          "Returns detailed information about the deleted API key.",
             security = { @SecurityRequirement(name = "Bearer Authentication") }
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "API Key deleted successfully"),
-            @ApiResponse(responseCode = "404", description = "API Key not found or does not belong to user"),
+            @ApiResponse(responseCode = "200", description = "API Key deleted successfully",
+                        content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ApiKeyOperationResponseDTO.class)
+                        )),
+            @ApiResponse(responseCode = "404", description = "API Key not found or does not belong to user",
+                        content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ApiKeyOperationResponseDTO.class)
+                        )),
             @ApiResponse(responseCode = "401", description = "Unauthorized - User not authenticated")
     })
-    public ResponseEntity<Void> deleteApiKey(
+    public ResponseEntity<ApiKeyOperationResponseDTO> deleteApiKey(
             @Parameter(description = "UUID of the API Key to delete", required = true)
             @PathVariable UUID keyId,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userFkId = getCurrentUserId(userDetails);
         log.info("User {} deleting API key with ID: {}", userFkId, keyId);
-        boolean deleted = apiKeyService.deleteApiKey(keyId, userFkId);
-        return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        
+        Optional<ApiKey> deletedKey = apiKeyService.deleteApiKeyWithDetails(keyId, userFkId);
+        
+        if (deletedKey.isPresent()) {
+            ApiKey key = deletedKey.get();
+            ApiKeyOperationResponseDTO response = ApiKeyOperationResponseDTO.deleteSuccess(
+                key.getId(), 
+                key.getName(), 
+                key.getPrefix()
+            );
+            log.info("✅ API key deleted successfully for user '{}': ID={}, Name={}", 
+                    userFkId, key.getId(), key.getName());
+            return ResponseEntity.ok(response);
+        } else {
+            ApiKeyOperationResponseDTO response = ApiKeyOperationResponseDTO.notFound(keyId, "DELETE");
+            log.warn("❌ API Key with ID {} not found for user {} for deletion.", keyId, userFkId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+    }
+
+    @PostMapping("/{keyId}/regenerate")
+    @Operation(
+            summary = "Regenerate API Key",
+            description = "Regenerates an existing API key with a new secret value. " +
+                         "The old key is immediately invalidated and a new key is generated with the same configuration. " +
+                         "⚠️ IMPORTANT: The new key is shown only once - save it immediately!",
+            security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "API Key regenerated successfully"),
+            @ApiResponse(responseCode = "404", description = "API Key not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    public ResponseEntity<?> regenerateApiKey(
+            @Parameter(description = "UUID of the API Key to regenerate", required = true)
+            @PathVariable UUID keyId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        String userId = getCurrentUserId(userDetails);
+        log.info("User {} requesting regeneration of API key: {}", userId, keyId);
+
+        try {
+            // Find the existing API key
+            Optional<ApiKey> existingKeyOpt = apiKeyRepository.findByIdAndUserFkId(keyId, userId);
+            if (existingKeyOpt.isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("error", "API Key not found or does not belong to user");
+                errorResponse.put("errorCode", "KEY_NOT_FOUND");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            }
+
+            ApiKey existingKey = existingKeyOpt.get();
+            
+            // Generate new API key with same prefix
+            String newRawApiKey = enhancedApiKeyService.generateApiKey(existingKey.getPrefix());
+            String newHashedApiKey = apiKeyHashUtil.hashApiKey(newRawApiKey);
+            String newKeyPreview = ApiKey.generateKeyPreview(newRawApiKey);
+            
+            // Update the existing key
+            existingKey.setKeyHash(newHashedApiKey);
+            existingKey.setKeyPreview(newKeyPreview);
+            existingKey.setUpdatedAt(LocalDateTime.now());
+            
+            ApiKey updatedKey = apiKeyRepository.save(existingKey);
+
+            // Create response with new key (shown only once)
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("id", updatedKey.getId());
+            response.put("name", updatedKey.getName());
+            response.put("description", updatedKey.getDescription());
+            response.put("prefix", updatedKey.getPrefix());
+            response.put("keyValue", newRawApiKey); // NEW KEY - shown only once
+            response.put("keyPreview", newKeyPreview);
+            response.put("registeredDomain", updatedKey.getRegisteredDomain());
+            response.put("rateLimitTier", updatedKey.getRateLimitTier().name());
+            response.put("scopes", updatedKey.getScopesAsList());
+            response.put("createdAt", updatedKey.getCreatedAt());
+            response.put("updatedAt", updatedKey.getUpdatedAt());
+            response.put("message", "⚠️ SAVE THIS KEY NOW - It will never be shown again!");
+            response.put("warning", "Old key is now invalid. Update all applications immediately.");
+
+            log.info("✅ API key regenerated successfully for user '{}': ID={}, Name={}", 
+                    userId, updatedKey.getId(), updatedKey.getName());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("❌ Error regenerating API key '{}' for user '{}': {}", keyId, userId, e.getMessage(), e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Failed to regenerate API key: " + e.getMessage());
+            errorResponse.put("errorCode", "REGENERATION_ERROR");
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     // --- NEW PLAN AND USAGE ENDPOINTS ---
@@ -768,7 +903,15 @@ public class ApiKeyController {
         if (to == null) to = LocalDateTime.now();
 
         try {
-            var usageSummary = usageStatsService.getUsageSummary(keyId);
+            // Get API key to retrieve rate limit tier
+            Optional<ApiKeyResponseDTO> apiKeyOpt = apiKeyService.getApiKeyByIdForUser(keyId, userFkId);
+            if (apiKeyOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Convert string rate limit tier to enum
+            RateLimitTier rateLimitTier = RateLimitTier.valueOf(apiKeyOpt.get().getRateLimitTier());
+            var usageSummary = usageStatsService.getUsageSummary(keyId, rateLimitTier);
             var detailedStats = usageStatsService.getUsageStatsForApiKey(keyId, from, to);
 
             Map<String, Object> response = Map.of(
@@ -928,7 +1071,9 @@ public class ApiKeyController {
             // Add usage statistics if service is available
             if (usageStatsService != null) {
                 try {
-                    var usageSummary = usageStatsService.getUsageSummary(keyId);
+                    // Convert string rate limit tier to enum
+                    RateLimitTier rateLimitTier = RateLimitTier.valueOf(apiKeyOpt.get().getRateLimitTier());
+                    var usageSummary = usageStatsService.getUsageSummary(keyId, rateLimitTier);
                     completeInfo.put("usageStats", usageSummary);
                 } catch (Exception e) {
                     log.warn("Failed to get usage stats for API key: {}", keyId, e);

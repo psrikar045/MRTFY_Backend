@@ -235,10 +235,10 @@ public class UsageStatsService {
      * Get usage summary for an API key (legacy method - uses daily window).
      * @deprecated Use getUsageSummary(UUID, RateLimitTier) instead
      */
-    @Deprecated
-    public UsageSummary getUsageSummary(UUID apiKeyId) {
-        return getUsageSummary(apiKeyId, RateLimitTier.FREE_TIER); // Default to FREE_TIER
-    }
+    // @Deprecated
+    // public UsageSummary getUsageSummary(UUID apiKeyId) {
+    //     return getUsageSummary(apiKeyId, RateLimitTier.FREE_TIER); // Default to FREE_TIER
+    // }
 
     /**
      * Update peak requests per minute for a stats window.
