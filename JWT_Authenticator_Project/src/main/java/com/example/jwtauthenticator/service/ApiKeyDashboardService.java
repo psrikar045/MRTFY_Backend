@@ -35,12 +35,12 @@ public class ApiKeyDashboardService {
     private final ApiKeyUsageStatsRepository usageStatsRepository;
 
     /**
-     * Get dashboard metrics for a specific API key
-     * Mixed approach: materialized view + real-time data
+     * Get dashboard metrics for a specific API key with SMART CACHING
+     * Short cache TTL (30 seconds) for balance between accuracy and performance
      */
     @Cacheable(value = "apiKeyDashboard", key = "#apiKeyId + '_' + #userId", unless = "#result == null", cacheManager = "dashboardCacheManager")
     public SingleApiKeyDashboardDTO getApiKeyDashboard(UUID apiKeyId, String userId) {
-        log.debug("Fetching dashboard for API key: {} (user: {})", apiKeyId, userId);
+        log.info("🔄 Fetching dashboard for API key: {} (user: {}) (30-second cache TTL)", apiKeyId, userId);
 
         // Verify API key belongs to user
         Optional<ApiKey> apiKeyOpt = apiKeyRepository.findByIdAndUserFkId(apiKeyId, userId);
@@ -50,22 +50,30 @@ public class ApiKeyDashboardService {
         }
 
         try {
-            // Try materialized view first (fast path)
-            Optional<ApiKeyDashboardSummaryView> summaryOpt = 
-                dashboardSummaryRepository.findByApiKeyIdAndUserFkId(apiKeyId, userId);
-
-            if (summaryOpt.isPresent()) {
-                log.debug("Using materialized view data for API key: {}", apiKeyId);
-                return buildDashboardFromSummary(summaryOpt.get(), apiKeyOpt.get());
-            } else {
-                log.debug("Materialized view data not available, calculating real-time for API key: {}", apiKeyId);
-                return calculateRealTimeDashboard(apiKeyOpt.get());
-            }
+            // PRIORITY: Real-time calculation for accuracy
+            log.debug("Calculating real-time dashboard for maximum accuracy for API key: {}", apiKeyId);
+            return calculateRealTimeDashboard(apiKeyOpt.get());
 
         } catch (Exception e) {
-            log.error("Error fetching dashboard for API key {}: {}", apiKeyId, e.getMessage(), e);
-            // Fallback to real-time calculation
-            return calculateRealTimeDashboard(apiKeyOpt.get());
+            log.warn("Real-time calculation failed for API key {}: {}, trying materialized view fallback", apiKeyId, e.getMessage());
+            
+            // Fallback to materialized view only if real-time fails
+            try {
+                Optional<ApiKeyDashboardSummaryView> summaryOpt = 
+                    dashboardSummaryRepository.findByApiKeyIdAndUserFkId(apiKeyId, userId);
+
+                if (summaryOpt.isPresent()) {
+                    log.info("Using materialized view as fallback for API key: {}", apiKeyId);
+                    return buildDashboardFromSummary(summaryOpt.get(), apiKeyOpt.get());
+                } else {
+                    log.error("No materialized view data available for API key: {}", apiKeyId);
+                    return null;
+                }
+
+            } catch (Exception fallbackError) {
+                log.error("Both real-time and materialized view failed for API key {}: {}", apiKeyId, fallbackError.getMessage(), fallbackError);
+                return null;
+            }
         }
     }
 
@@ -84,9 +92,9 @@ public class ApiKeyDashboardService {
 
         // Build monthly metrics
         SingleApiKeyDashboardDTO.MonthlyMetricsDTO monthlyMetrics = buildMonthlyMetrics(
-            summary.getTotalCallsMonth(),
-            summary.getSuccessfulCallsMonth(),
-            summary.getFailedCallsMonth(),
+            summary.getTotalCallsCurrentMonth(),
+            summary.getSuccessfulCallsCurrentMonth(),
+            summary.getFailedCallsCurrentMonth(),
             summary.getQuotaLimit(),
             summary.getUsagePercentage()
         );
@@ -132,34 +140,46 @@ public class ApiKeyDashboardService {
         LocalDate yesterday = today.minusDays(1);
         String currentMonth = today.format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        // Calculate today's and yesterday's requests using existing methods
+        // Calculate today's and yesterday's requests using precise date ranges
+        LocalDateTime todayStart = today.atStartOfDay();
+        LocalDateTime todayEnd = today.atTime(23, 59, 59, 999999999);
+        LocalDateTime yesterdayStart = yesterday.atStartOfDay();
+        LocalDateTime yesterdayEnd = yesterday.atTime(23, 59, 59, 999999999);
+        
         Long requestsToday = requestLogRepository.countByApiKeyIdAndRequestTimestampBetween(
-            apiKeyId, today.atStartOfDay(), now);
+            apiKeyId, todayStart, todayEnd);
         Long requestsYesterday = requestLogRepository.countByApiKeyIdAndRequestTimestampBetween(
-            apiKeyId, yesterday.atStartOfDay(), yesterday.atTime(23, 59, 59));
+            apiKeyId, yesterdayStart, yesterdayEnd);
+            
+        log.info("🔍 DEBUG API Key {} - Today range: {} to {}, Count: {}", 
+                 apiKeyId, todayStart, todayEnd, requestsToday);
+        log.info("🔍 DEBUG API Key {} - Yesterday range: {} to {}, Count: {}", 
+                 apiKeyId, yesterdayStart, yesterdayEnd, requestsYesterday);
 
         Double todayVsYesterdayChange = calculatePercentageChange(requestsToday, requestsYesterday);
 
         // Calculate pending requests (rate limited + failed requests in last hour)
         Long pendingRequests = requestLogRepository.countPendingRequestsForApiKey(apiKeyId, now.minusHours(1));
 
-        // Get monthly usage data
-        var monthlyUsageOpt = monthlyUsageRepository.findByApiKeyIdAndMonthYear(apiKeyId, currentMonth);
+        // ✅ FIXED: Get ACCURATE monthly usage data from request logs (not inflated monthly usage table)
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth()).atTime(23, 59, 59, 999999999);
         
-        Long totalCallsMonth = 0L;
-        Long successfulCallsMonth = 0L;
-        Long failedCallsMonth = 0L;
-        Long quotaLimit = 0L;
-        Double usagePercentage = 0.0;
-
-        if (monthlyUsageOpt.isPresent()) {
-            var usage = monthlyUsageOpt.get();
-            totalCallsMonth = usage.getTotalCalls().longValue();
-            successfulCallsMonth = usage.getSuccessfulCalls().longValue();
-            failedCallsMonth = usage.getFailedCalls().longValue();
-            quotaLimit = usage.getQuotaLimit() != null ? usage.getQuotaLimit().longValue() : 0L;
-            usagePercentage = usage.getQuotaUsagePercentage();
-        }
+        Long totalCallsMonth = requestLogRepository.countByApiKeyIdAndRequestTimestampBetween(apiKeyId, monthStart, monthEnd);
+        Long successfulCallsMonth = requestLogRepository.countByApiKeyIdAndRequestTimestampBetweenAndSuccess(apiKeyId, monthStart, monthEnd, true);
+        Long failedCallsMonth = requestLogRepository.countByApiKeyIdAndRequestTimestampBetweenAndSuccess(apiKeyId, monthStart, monthEnd, false);
+        
+        log.info("🔍 DEBUG API Key {} - Month range: {} to {}, Total: {}, Success: {}, Failed: {}", 
+                 apiKeyId, monthStart, monthEnd, totalCallsMonth, successfulCallsMonth, failedCallsMonth);
+        
+        // Get quota limit from API key's rate limit tier (not from potentially inflated monthly usage)
+        Long quotaLimit = (long) apiKey.getRateLimitTier().getRequestsPerMonth();
+        if (quotaLimit == -1L) quotaLimit = -1L; // Unlimited
+        
+        Double usagePercentage = quotaLimit > 0 ? (totalCallsMonth.doubleValue() / quotaLimit.doubleValue()) * 100.0 : 0.0;
+        
+        log.info("📊 FIXED API Key Dashboard for {}: totalCallsMonth={} (from request_logs - ACCURATE), quotaLimit={} (from tier)", 
+                 apiKeyId, totalCallsMonth, quotaLimit);
 
         // Get last used timestamp
         LocalDateTime lastUsed = requestLogRepository.findLastRequestTimestamp(apiKeyId);

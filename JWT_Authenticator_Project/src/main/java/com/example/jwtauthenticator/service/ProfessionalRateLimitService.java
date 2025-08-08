@@ -108,8 +108,9 @@ public class ProfessionalRateLimitService {
             usageStats.incrementRequestCount();
             usageStatsRepository.save(usageStats);
             
-            // Also update monthly usage tracking (single source of truth)
-            monthlyUsageService.recordApiCall(apiKey.getId(), apiKey.getUserFkId(), true);
+            // ❌ REMOVED: Monthly usage should be recorded AFTER successful API call, not during rate limit check
+            // monthlyUsageService.recordApiCall(apiKey.getId(), apiKey.getUserFkId(), true);
+            // This was causing inflated counts because rate limit checks happen more often than actual API calls
 
             log.debug("Rate limit check passed for API key {}: {}/{} requests used", 
                      apiKeyId, usageStats.getRequestCount(), usageStats.getRequestLimit());

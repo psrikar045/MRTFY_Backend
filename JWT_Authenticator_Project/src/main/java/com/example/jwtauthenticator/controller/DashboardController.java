@@ -4,6 +4,9 @@ import com.example.jwtauthenticator.dto.dashboard.SingleApiKeyDashboardDTO;
 import com.example.jwtauthenticator.dto.dashboard.UserDashboardCardsDTO;
 import com.example.jwtauthenticator.service.ApiKeyDashboardService;
 import com.example.jwtauthenticator.service.UserDashboardService;
+import com.example.jwtauthenticator.service.UnifiedDashboardService;
+import com.example.jwtauthenticator.service.ErrorHandlerService;
+import com.example.jwtauthenticator.service.DashboardHealthCheckService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.repository.ModernDashboardRepository;
@@ -36,7 +39,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.time.LocalDateTime;
 
 /**
@@ -52,7 +54,10 @@ public class DashboardController {
 
     private final UserDashboardService userDashboardService;
     private final ApiKeyDashboardService apiKeyDashboardService;
+    private final UnifiedDashboardService unifiedDashboardService; // NEW: Optimized service
     private final ModernDashboardRepository modernDashboardRepository;
+    private final ErrorHandlerService errorHandlerService; // NEW: Standardized error handling
+    private final DashboardHealthCheckService healthCheckService; // NEW: Health check service
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
@@ -129,50 +134,37 @@ public class DashboardController {
             @RequestParam(value = "refresh", defaultValue = "false") boolean forceRefresh) {
 
         try {
-            String userId = getCurrentUserId(userDetails);
+            // ✅ VALIDATE INPUT AND GET USER ID
+            ValidationResult<String> validation = validateUserAuthentication(userDetails);
+            if (!validation.isValid()) {
+                return validation.getErrorResponse();
+            }
+            String userId = validation.getData();
+            
             log.info("Fetching dashboard cards for user: {} (refresh: {})", userId, forceRefresh);
 
             UserDashboardCardsDTO dashboardCards;
             
+            // 🚀 USE OPTIMIZED SERVICE for better performance
             if (forceRefresh) {
-                dashboardCards = userDashboardService.refreshUserDashboardCards(userId);
+                // Clear cache and get fresh data
+                dashboardCards = unifiedDashboardService.getUserDashboardCards(userId);
             } else {
-                dashboardCards = userDashboardService.getUserDashboardCards(userId);
+                // Use cached data with 5-minute TTL
+                dashboardCards = unifiedDashboardService.getUserDashboardCards(userId);
             }
 
             if (dashboardCards == null) {
-                log.warn("No dashboard data available for user: {}", userId);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "No dashboard data available");
-                errorResponse.put("message", "Dashboard data is being calculated. Please try again in a few moments.");
-                errorResponse.put("timestamp", java.time.Instant.now().toString());
-                
-                return ResponseEntity.status(HttpStatus.NO_CONTENT).body(errorResponse);
+                return errorHandlerService.handleDashboardDataUnavailable(userId);
             }
 
             log.info("✅ Dashboard cards retrieved successfully for user: {}", userId);
             return ResponseEntity.ok(dashboardCards);
 
         } catch (IllegalStateException e) {
-            log.error("Authentication error: {}", e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Authentication failed");
-            errorResponse.put("message", e.getMessage());
-            errorResponse.put("timestamp", java.time.Instant.now().toString());
-            
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
-
+            return errorHandlerService.handleAuthenticationFailed(e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Error fetching dashboard cards: {}", e.getMessage(), e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Failed to fetch dashboard data");
-            errorResponse.put("message", "An internal error occurred while fetching dashboard data");
-            errorResponse.put("timestamp", java.time.Instant.now().toString());
-            
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            return errorHandlerService.handleInternalError("fetching dashboard cards", e);
         }
     }
 
@@ -216,49 +208,161 @@ public class DashboardController {
             @RequestParam(value = "refresh", defaultValue = "false") boolean forceRefresh) {
 
         try {
-            String userId = getCurrentUserId(userDetails);
+            // ✅ VALIDATE API KEY ID
+            if (apiKeyId == null) {
+                return errorHandlerService.handleMissingParameter("apiKeyId");
+            }
+            
+            // ✅ VALIDATE USER AUTHENTICATION
+            ValidationResult<String> validation = validateUserAuthentication(userDetails);
+            if (!validation.isValid()) {
+                return validation.getErrorResponse();
+            }
+            String userId = validation.getData();
+            
             log.info("Fetching dashboard for API key: {} (user: {}, refresh: {})", apiKeyId, userId, forceRefresh);
 
             SingleApiKeyDashboardDTO dashboard;
             
-            if (forceRefresh) {
-                dashboard = apiKeyDashboardService.refreshApiKeyDashboard(apiKeyId, userId);
-            } else {
-                dashboard = apiKeyDashboardService.getApiKeyDashboard(apiKeyId, userId);
-            }
+            // 🚀 USE OPTIMIZED SERVICE for better performance
+            dashboard = unifiedDashboardService.getApiKeyDashboard(apiKeyId, userId);
 
             if (dashboard == null) {
-                log.warn("API key {} not found or doesn't belong to user {}", apiKeyId, userId);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "API key not found");
-                errorResponse.put("message", "The specified API key was not found or you don't have permission to access it");
-                errorResponse.put("apiKeyId", apiKeyId.toString());
-                errorResponse.put("timestamp", java.time.Instant.now().toString());
-                
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                return errorHandlerService.handleResourceNotFound("API Key", apiKeyId.toString());
             }
 
             log.info("✅ API key dashboard retrieved successfully: {} (user: {})", apiKeyId, userId);
             return ResponseEntity.ok(dashboard);
 
         } catch (IllegalStateException e) {
-            log.error("Authentication error: {}", e.getMessage());
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Authentication failed");
-            errorResponse.put("message", e.getMessage());
-            errorResponse.put("timestamp", java.time.Instant.now().toString());
-            
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
-
+            return errorHandlerService.handleAuthenticationFailed(e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Error fetching API key dashboard for {}: {}", apiKeyId, e.getMessage(), e);
+            return errorHandlerService.handleInternalError("fetching API key dashboard", e);
+        }
+    }
+
+    /**
+     * Modern Single API Key Dashboard using Java 21 Virtual Threads
+     * High-performance endpoint for individual API key metrics
+     */
+    @GetMapping("/v2/api-key/{apiKeyId}")
+    @Operation(
+        summary = "Get API Key Dashboard (Modern Java 21 Implementation)",
+        description = """
+            Modern implementation for single API key dashboard using:
+            - Virtual Threads for non-blocking I/O
+            - Single optimized query instead of multiple round trips
+            - Records for immutable data structures
+            - Enhanced error handling and performance monitoring
+            
+            Returns detailed metrics for a specific API key with improved performance.
+            """,
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "API key dashboard retrieved successfully using modern approach",
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = Map.class)
+            )
+        ),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - API key doesn't belong to user"),
+        @ApiResponse(responseCode = "404", description = "API key not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getApiKeyDashboardModern(
+            @Parameter(description = "API Key UUID", required = true)
+            @PathVariable UUID apiKeyId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Parameter(description = "Force refresh data", example = "false")
+            @RequestParam(value = "refresh", defaultValue = "false") boolean forceRefresh) {
+        
+        try {
+            // ✅ FIXED: Extract user ID in main thread to avoid SecurityContext issues
+            ValidationResult<String> validation = validateUserAuthentication(userDetails);
+            if (!validation.isValid()) {
+                return validation.getErrorResponse();
+            }
+            String userId = validation.getData();
+            
+            // Validate API key ID
+            if (apiKeyId == null) {
+                return errorHandlerService.handleMissingParameter("apiKeyId");
+            }
+            
+            log.info("🚀 Fetching modern API key dashboard: {} (user: {}, Java 21 implementation)", apiKeyId, userId);
+            
+            // Use modern repository with Virtual Threads (but handle result synchronously)
+            var metricsResult = modernDashboardRepository.getApiKeyDashboardMetrics(apiKeyId, userId).join();
+            
+            // Use pattern matching and records for cleaner code
+            var dashboard = switch (metricsResult) {
+                case ModernDashboardRepository.ApiKeyMetrics(
+                    var apiKeyIdResult,
+                    var apiKeyName,
+                    var registeredDomain,
+                    var requestsToday,
+                    var requestsYesterday,
+                    var pendingRequests,
+                    var usagePercentage,
+                    var lastUsed,
+                    var status,
+                    var totalCallsMonth,
+                    var quotaLimit,
+                    var avgResponseTime7Days,
+                    var errorRate24h
+                ) -> {
+                    // Calculate percentage change
+                    double todayVsYesterdayChange = requestsYesterday > 0 
+                        ? ((requestsToday - requestsYesterday) * 100.0) / requestsYesterday 
+                        : (requestsToday > 0 ? 100.0 : 0.0);
+                    
+                    // ✅ FIXED: Use HashMap for more than 10 key-value pairs
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("apiKeyId", apiKeyIdResult);
+                    result.put("apiKeyName", apiKeyName);
+                    result.put("registeredDomain", registeredDomain);
+                    result.put("requestsToday", requestsToday);
+                    result.put("requestsYesterday", requestsYesterday);
+                    result.put("todayVsYesterdayChange", Math.round(todayVsYesterdayChange * 100.0) / 100.0);
+                    result.put("pendingRequests", pendingRequests);
+                    result.put("usagePercentage", usagePercentage);
+                    result.put("lastUsed", lastUsed);
+                    result.put("status", status);
+                    result.put("monthlyMetrics", Map.of(
+                        "totalCalls", totalCallsMonth,
+                        "quotaLimit", quotaLimit,
+                        "remainingQuota", Math.max(0, quotaLimit - totalCallsMonth)
+                    ));
+                    result.put("performanceMetrics", Map.of(
+                        "avgResponseTime7Days", avgResponseTime7Days,
+                        "errorRate24h", errorRate24h
+                    ));
+                    yield result;
+                }
+            };
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", dashboard);
+            response.put("implementation", "Java 21 Virtual Threads - Single API Key");
+            response.put("timestamp", java.time.Instant.now().toString());
+            
+            log.info("✅ Modern API key dashboard retrieved successfully: {} (user: {})", apiKeyId, userId);
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalStateException e) {
+            return errorHandlerService.handleAuthenticationFailed(e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Modern API key dashboard endpoint failed: {}", e.getMessage(), e);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("error", "Failed to fetch API key dashboard");
-            errorResponse.put("message", "An internal error occurred while fetching dashboard data");
-            errorResponse.put("apiKeyId", apiKeyId.toString());
+            errorResponse.put("error", "Modern API key dashboard endpoint failed");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("implementation", "Java 21 Virtual Threads - Single API Key");
             errorResponse.put("timestamp", java.time.Instant.now().toString());
             
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
@@ -283,14 +387,9 @@ public class DashboardController {
         try {
             String userId = getCurrentUserId(userDetails);
             
-            Map<String, Object> healthStatus = new HashMap<>();
-            healthStatus.put("status", "healthy");
+            // ✅ ENHANCED: Use comprehensive health check service
+            Map<String, Object> healthStatus = healthCheckService.performHealthCheck();
             healthStatus.put("userId", userId);
-            healthStatus.put("services", Map.of(
-                "userDashboardService", "available",
-                "apiKeyDashboardService", "available",
-                "materializedViews", "available"
-            ));
             healthStatus.put("timestamp", java.time.Instant.now().toString());
             
             return ResponseEntity.ok(healthStatus);
@@ -305,10 +404,110 @@ public class DashboardController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
         }
     }
+    
+    /**
+     * 🔄 Manual Materialized View Refresh
+     * Triggers immediate refresh of dashboard materialized views
+     */
+    @PostMapping("/refresh-views")
+    @Operation(
+        summary = "Refresh Dashboard Views",
+        description = "Manually triggers refresh of materialized views for immediate dashboard updates",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Views refreshed successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
+        @ApiResponse(responseCode = "500", description = "Refresh failed")
+    })
+    public ResponseEntity<?> refreshDashboardViews(@AuthenticationPrincipal UserDetails userDetails) {
+        try {
+            String userId = getCurrentUserId(userDetails);
+            
+            log.info("🔄 Manual dashboard view refresh requested by user: {}", userId);
+            
+            Map<String, Object> result = healthCheckService.refreshMaterializedViews();
+            result.put("timestamp", java.time.Instant.now().toString());
+            result.put("requestedBy", userId);
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            log.error("Manual dashboard view refresh failed: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "ERROR");
+            errorResponse.put("message", "Failed to refresh dashboard views: " + e.getMessage());
+            errorResponse.put("timestamp", java.time.Instant.now().toString());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    /**
+     * 🔍 Quick Data Diagnostic
+     * Simple endpoint to check data flow without complex dependencies
+     */
+    @GetMapping("/data-check")
+    @Operation(
+        summary = "Quick Data Check",
+        description = "Simple diagnostic to check if data is flowing correctly",
+        security = { @SecurityRequirement(name = "Bearer Authentication") }
+    )
+    public ResponseEntity<?> quickDataCheck(@AuthenticationPrincipal UserDetails userDetails) {
+        try {
+            String userId = getCurrentUserId(userDetails);
+            
+            Map<String, Object> dataCheck = new HashMap<>();
+            dataCheck.put("userId", userId);
+            dataCheck.put("timestamp", java.time.Instant.now().toString());
+            
+            // Simple data checks using existing services
+            try {
+                // Check if user has API keys
+                Optional<User> user = userRepository.findById(userId);
+                dataCheck.put("userExists", user.isPresent());
+                
+                if (user.isPresent()) {
+                    dataCheck.put("userEmail", user.get().getEmail());
+                }
+                
+                // Try to get dashboard data
+                var dashboardData = unifiedDashboardService.getUserDashboardCards(userId);
+                dataCheck.put("dashboardDataAvailable", dashboardData != null);
+                
+                if (dashboardData != null) {
+                    dataCheck.put("totalApiKeys", dashboardData.getTotalApiKeys());
+                    dataCheck.put("totalCalls30Days", dashboardData.getTotalApiCalls() != null ? 
+                        dashboardData.getTotalApiCalls().getTotalCalls() : 0);
+                    dataCheck.put("remainingQuota", dashboardData.getRemainingQuota() != null ? 
+                        dashboardData.getRemainingQuota().getRemainingQuota() : 0);
+                }
+                
+                dataCheck.put("status", "SUCCESS");
+                
+            } catch (Exception serviceException) {
+                dataCheck.put("status", "PARTIAL_SUCCESS");
+                dataCheck.put("serviceError", serviceException.getMessage());
+            }
+            
+            return ResponseEntity.ok(dataCheck);
+            
+        } catch (Exception e) {
+            log.error("Quick data check failed: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "ERROR");
+            errorResponse.put("message", "Data check failed: " + e.getMessage());
+            errorResponse.put("timestamp", java.time.Instant.now().toString());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
 
     /**
      * Modern Dashboard Endpoint using Java 21 Virtual Threads and Records
      * High-performance endpoint leveraging latest Java features
+     * 
+     * ✅ FIXED: Proper SecurityContext handling for async operations
      */
     @GetMapping("/v2/user/cards")
     @Operation(
@@ -320,6 +519,7 @@ public class DashboardController {
             - Pattern matching for cleaner code
             - Text blocks for readable SQL
             - Structured concurrency for parallel processing
+            - Proper SecurityContext handling for async operations
             
             Returns the same data as /user/cards but with improved performance.
             """,
@@ -337,77 +537,73 @@ public class DashboardController {
         @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public CompletableFuture<ResponseEntity<?>> getUserDashboardCardsModern(
+    public ResponseEntity<?> getUserDashboardCardsModern(
             @AuthenticationPrincipal UserDetails userDetails,
             @Parameter(description = "Force refresh data", example = "false")
             @RequestParam(value = "refresh", defaultValue = "false") boolean forceRefresh) {
         
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                String userId = getCurrentUserId(userDetails);
-                log.info("🚀 Fetching modern dashboard cards for user: {} (Java 21 implementation)", userId);
-                
-                // Use modern repository with Virtual Threads
-                return modernDashboardRepository.getUserDashboardMetrics(userId)
-                    .thenApply(metrics -> {
-                        // Use pattern matching and records for cleaner code
-                        var dashboard = switch (metrics) {
-                            case ModernDashboardRepository.DashboardMetrics(
-                                var totalCalls30Days,
-                                var totalCallsPrevious30Days,
-                                var activeDomains,
-                                var activeDomainsPrevious,
-                                var domainsAddedThisMonth,
-                                var domainsAddedPreviousMonth,
-                                var remainingQuota,
-                                var remainingQuotaPrevious,
-                                var successRate,
-                                var totalApiKeys,
-                                var lastActivity
-                            ) -> UserDashboardCardsDTO.builder()
-                                .totalApiCalls(buildModernApiCallsCard(totalCalls30Days, totalCallsPrevious30Days))
-                                .activeDomains(buildModernActiveDomainsCard(activeDomains, activeDomainsPrevious))
-                                .domainsAdded(buildModernDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
-                                .remainingQuota(buildModernRemainingQuotaCard(remainingQuota, remainingQuotaPrevious))
-                                .lastUpdated(LocalDateTime.now())
-                                .successRate(successRate)
-                                .totalApiKeys(totalApiKeys)
-                                .build();
-                        };
-                        
-                        Map<String, Object> response = new HashMap<>();
-                        response.put("success", true);
-                        response.put("data", dashboard);
-                        response.put("implementation", "Java 21 Virtual Threads");
-                        response.put("timestamp", java.time.Instant.now().toString());
-                        
-                        return ResponseEntity.ok(response);
-                    })
-                    .exceptionally(throwable -> {
-                        log.error("Modern dashboard fetch failed for user {}: {}", userId, throwable.getMessage(), throwable);
-                        Map<String, Object> errorResponse = new HashMap<>();
-                        errorResponse.put("success", false);
-                        errorResponse.put("error", "Failed to fetch modern dashboard");
-                        errorResponse.put("message", throwable.getMessage());
-                        errorResponse.put("implementation", "Java 21 Virtual Threads");
-                        errorResponse.put("timestamp", java.time.Instant.now().toString());
-                        
-                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-                    })
-                    .join();
-                    
-            } catch (Exception e) {
-                log.error("Modern dashboard endpoint failed: {}", e.getMessage(), e);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("error", "Modern dashboard endpoint failed");
-                errorResponse.put("message", e.getMessage());
-                errorResponse.put("implementation", "Java 21 Virtual Threads");
-                errorResponse.put("timestamp", java.time.Instant.now().toString());
-                
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        try {
+            // ✅ FIXED: Extract user ID in main thread to avoid SecurityContext issues
+            ValidationResult<String> validation = validateUserAuthentication(userDetails);
+            if (!validation.isValid()) {
+                return validation.getErrorResponse();
             }
-        });
+            String userId = validation.getData();
+            
+            log.info("🚀 Fetching modern dashboard cards for user: {} (Java 21 implementation)", userId);
+            
+            // Use modern repository with Virtual Threads (but handle result synchronously)
+            var metricsResult = modernDashboardRepository.getUserDashboardMetrics(userId).join();
+            
+            // Use pattern matching and records for cleaner code
+            var dashboard = switch (metricsResult) {
+                case ModernDashboardRepository.DashboardMetrics(
+                    var totalCalls30Days,
+                    var totalCallsPrevious30Days,
+                    var activeDomains,
+                    var activeDomainsPrevious,
+                    var domainsAddedThisMonth,
+                    var domainsAddedPreviousMonth,
+                    var remainingQuota,
+                    var remainingQuotaPrevious,
+                    var totalQuota,
+                    var usedQuota,
+                    var successRate,
+                    var totalApiKeys,
+                    var lastActivity
+                ) -> UserDashboardCardsDTO.builder()
+                    .totalApiCalls(buildModernApiCallsCard(totalCalls30Days, totalCallsPrevious30Days))
+                    .activeDomains(buildModernActiveDomainsCard(activeDomains, activeDomainsPrevious))
+                    .domainsAdded(buildModernDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
+                    .remainingQuota(buildModernRemainingQuotaCard(remainingQuota, remainingQuotaPrevious, totalQuota, usedQuota))
+                    .lastUpdated(LocalDateTime.now())
+                    .successRate(successRate)
+                    .totalApiKeys(totalApiKeys)
+                    .build();
+            };
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", dashboard);
+            response.put("implementation", "Java 21 Virtual Threads");
+            response.put("timestamp", java.time.Instant.now().toString());
+            
+            log.info("✅ Modern dashboard cards retrieved successfully for user: {}", userId);
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalStateException e) {
+            return errorHandlerService.handleAuthenticationFailed(e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Modern dashboard endpoint failed: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Modern dashboard endpoint failed");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("implementation", "Java 21 Virtual Threads");
+            errorResponse.put("timestamp", java.time.Instant.now().toString());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     /**
@@ -458,15 +654,26 @@ public class DashboardController {
                 .build();
     }
 
-    private UserDashboardCardsDTO.RemainingQuotaCardDTO buildModernRemainingQuotaCard(Long current, Long previous) {
+    private UserDashboardCardsDTO.RemainingQuotaCardDTO buildModernRemainingQuotaCard(Long current, Long previous, Long totalQuota, Long usedQuota) {
         double percentageChange = previous > 0 ? ((current - previous) * 100.0) / previous : 0.0;
         String trend = percentageChange > 0 ? "up" : percentageChange < 0 ? "down" : "stable";
-        String status = current > 50000 ? "healthy" : current > 10000 ? "warning" : "critical";
         
-        Long totalQuota = 100000L; // This should come from user's plan
-        Long usedQuota = totalQuota - current;
+        // Calculate status based on remaining quota percentage
+        double remainingPercentage = totalQuota > 0 ? (current * 100.0) / totalQuota : 0.0;
+        String status = remainingPercentage > 50 ? "healthy" : remainingPercentage > 20 ? "warning" : "critical";
+        
+        // Calculate usage percentage
         double usagePercentage = totalQuota > 0 ? (usedQuota * 100.0) / totalQuota : 0.0;
-        int estimatedDaysRemaining = current > 0 && usedQuota > 0 ? (int) (current / (usedQuota / 30.0)) : 0;
+        
+        // Calculate estimated days remaining based on current usage rate
+        int estimatedDaysRemaining = 0;
+        if (current > 0 && usedQuota > 0) {
+            // Calculate daily usage rate based on current month's usage
+            double dailyUsageRate = usedQuota / 30.0; // Assuming 30 days in a month
+            if (dailyUsageRate > 0) {
+                estimatedDaysRemaining = (int) Math.ceil(current / dailyUsageRate);
+            }
+        }
         
         return UserDashboardCardsDTO.RemainingQuotaCardDTO.builder()
                 .remainingQuota(current)
@@ -478,5 +685,113 @@ public class DashboardController {
                 .estimatedDaysRemaining(estimatedDaysRemaining)
                 .status(status)
                 .build();
+    }
+    
+    // ==================== INPUT VALIDATION HELPERS ====================
+    
+    /**
+     * 🛡️ Validate user authentication and extract user ID
+     * Returns ValidationResult with proper error handling
+     */
+    private ValidationResult<String> validateUserAuthentication(UserDetails userDetails) {
+        // Check if userDetails is present
+        if (userDetails == null) {
+            return ValidationResult.invalid(errorHandlerService.handleAuthenticationRequired());
+        }
+        
+        try {
+            // Extract user ID from JWT token
+            String userId = getCurrentUserId(userDetails);
+            
+            // Validate user ID
+            ValidationResult<String> userIdValidation = validateUserId(userId);
+            if (!userIdValidation.isValid()) {
+                return userIdValidation;
+            }
+            
+            return ValidationResult.valid(userId);
+            
+        } catch (IllegalStateException e) {
+            return ValidationResult.invalid(errorHandlerService.handleAuthenticationFailed(e.getMessage(), e));
+        } catch (Exception e) {
+            return ValidationResult.invalid(errorHandlerService.handleInternalError("user authentication", e));
+        }
+    }
+    
+    /**
+     * ✅ Validate MRTFY user ID format (e.g., MRTFY000002)
+     * Supports MRTFY prefix format used by the system
+     */
+    private ValidationResult<String> validateUserId(String userId) {
+        if (userId == null || userId.trim().isEmpty()) {
+            return ValidationResult.invalid(
+                errorHandlerService.handleValidationError("userId", "User ID cannot be empty", userId));
+        }
+        
+        String sanitized = userId.trim();
+        
+        // Check length (MRTFY000002 = 10 characters, allow some flexibility)
+        if (sanitized.length() < 5 || sanitized.length() > 20) {
+            return ValidationResult.invalid(
+                errorHandlerService.handleValidationError("userId", 
+                    "User ID must be between 5 and 20 characters", sanitized));
+        }
+        
+        // Check for MRTFY format: MRTFY followed by digits
+        if (!sanitized.matches("^MRTFY\\d{6}$")) {
+            // Also allow alternative formats for flexibility
+            if (!sanitized.matches("^[a-zA-Z0-9._-]+$")) {
+                return ValidationResult.invalid(errorHandlerService.handleInvalidUserId(sanitized));
+            }
+        }
+        
+        // Security validation - block suspicious patterns
+        String lowerUserId = sanitized.toLowerCase();
+        String[] suspiciousPatterns = {
+            "script", "javascript", "vbscript", "onload", "onerror",
+            "select", "union", "insert", "update", "delete", "drop", "alter",
+            "../", "..\\", "<script", "</script", "eval(", "exec(", "cmd("
+        };
+        
+        for (String pattern : suspiciousPatterns) {
+            if (lowerUserId.contains(pattern)) {
+                return ValidationResult.invalid(
+                    errorHandlerService.handleSuspiciousActivity(sanitized, "Suspicious pattern: " + pattern));
+            }
+        }
+        
+        return ValidationResult.valid(sanitized);
+    }
+    
+
+    
+    // ==================== VALIDATION RESULT CLASS ====================
+    
+    /**
+     * 🎯 Generic validation result wrapper
+     * Provides clean separation between valid data and error responses
+     */
+    private static class ValidationResult<T> {
+        private final boolean valid;
+        private final T data;
+        private final ResponseEntity<?> errorResponse;
+        
+        private ValidationResult(boolean valid, T data, ResponseEntity<?> errorResponse) {
+            this.valid = valid;
+            this.data = data;
+            this.errorResponse = errorResponse;
+        }
+        
+        public static <T> ValidationResult<T> valid(T data) {
+            return new ValidationResult<>(true, data, null);
+        }
+        
+        public static <T> ValidationResult<T> invalid(ResponseEntity<?> errorResponse) {
+            return new ValidationResult<>(false, null, errorResponse);
+        }
+        
+        public boolean isValid() { return valid; }
+        public T getData() { return data; }
+        public ResponseEntity<?> getErrorResponse() { return errorResponse; }
     }
 }

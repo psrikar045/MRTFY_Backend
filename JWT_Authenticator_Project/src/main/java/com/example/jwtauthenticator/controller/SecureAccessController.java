@@ -19,13 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.jwtauthenticator.dto.BrandExtractionResponse;
 import com.example.jwtauthenticator.dto.ForwardRequest;
 import com.example.jwtauthenticator.security.ApiKeyDomainGuard;
-import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
-import com.example.jwtauthenticator.service.ApiKeyRequestLogService;
-import com.example.jwtauthenticator.service.EnhancedApiKeyValidationService;
 import com.example.jwtauthenticator.service.ForwardService;
-import com.example.jwtauthenticator.service.MonthlyUsageTrackingService;
 import com.example.jwtauthenticator.service.ProfessionalRateLimitService;
-import com.example.jwtauthenticator.service.UsageStatsService;
+import com.example.jwtauthenticator.service.StreamlinedUsageTracker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,13 +67,10 @@ public class SecureAccessController {
     private final ForwardService forwardService;
     private final ProfessionalRateLimitService professionalRateLimitService;
     private final ObjectMapper objectMapper;
-    private final EnhancedApiKeyValidationService enhancedValidationService;
-    private final ApiKeyAuthenticationService apiKeyAuthenticationService;
+
     
-    // MISSING SERVICES: Add usage tracking and logging services
-    private final ApiKeyRequestLogService apiKeyRequestLogService;
-    private final UsageStatsService usageStatsService;
-    private final MonthlyUsageTrackingService monthlyUsageService;
+    // ✅ STREAMLINED: Single service for all /rivofetch tracking
+    private final StreamlinedUsageTracker usageTracker;
 
     @PostMapping("/rivofetch")
     @Operation(
@@ -455,43 +448,55 @@ public class SecureAccessController {
     
     /**
      * Log successful API request and update usage statistics
-     * 
-     * NOTE: Usage counting is handled by ProfessionalRateLimitService.checkRateLimit()
-     * to avoid duplicate counting. This method only handles request logging.
+     * ✅ FIXED: Use synchronous tracking to prevent connection leaks
      */
     private void logSuccessfulRequest(HttpServletRequest request, com.example.jwtauthenticator.entity.ApiKey apiKey, 
                                     int responseStatus, long responseTimeMs, String targetUrl) {
         try {
-            // Log request to ApiKeyRequestLog table (for audit trail)
-            apiKeyRequestLogService.logRequestAsync(request, apiKey, responseStatus, responseTimeMs);
+            // ✅ FIXED: Use synchronous tracking to prevent connection leaks
+            // Async @Transactional methods can cause connection leaks due to transaction context issues
+            usageTracker.trackRivofetchCallSync(
+                apiKey.getId(),
+                apiKey.getUserFkId(),
+                getClientIpAddress(request),
+                extractDomainFromRequest(request),
+                request.getHeader("User-Agent"),
+                responseStatus,
+                responseTimeMs,
+                null // No error message for successful calls
+            );
             
-            // ❌ REMOVED: Duplicate usage tracking - ProfessionalRateLimitService already handles this
-            // usageStatsService.recordApiKeyUsage() - CAUSES DUPLICATE COUNTING
-            // monthlyUsageService.recordApiCall() - CAUSES DUPLICATE COUNTING
-            
-            // ✅ Usage statistics are already updated by ProfessionalRateLimitService.checkRateLimit()
-            // which is called before this method (line 193-194 in secureRivoFetch)
-            
-            log.info("Successfully logged API request for key: {} (usage already tracked by rate limiter)", apiKey.getId());
+            log.info("✅ Successfully tracked /rivofetch call for API key: {}", apiKey.getId());
             
         } catch (Exception e) {
-            log.error("Failed to log successful API request for key: {} - Error: {}", apiKey.getId(), e.getMessage(), e);
+            log.error("Failed to track successful API request for key: {} - Error: {}", apiKey.getId(), e.getMessage(), e);
         }
     }
     
     /**
      * Log failed API request
+     * ✅ FIXED: Use synchronous tracking to prevent connection leaks
      */
     private void logFailedRequest(HttpServletRequest request, com.example.jwtauthenticator.entity.ApiKey apiKey, 
                                 int responseStatus, long responseTimeMs, String errorMessage, String targetUrl) {
         try {
-            // Log request to ApiKeyRequestLog table
-            apiKeyRequestLogService.logRequest(request, apiKey, responseStatus, responseTimeMs, errorMessage);
+            // ✅ FIXED: Use synchronous tracking to prevent connection leaks
+            // Async @Transactional methods can cause connection leaks due to transaction context issues
+            usageTracker.trackRivofetchCallSync(
+                apiKey.getId(),
+                apiKey.getUserFkId(),
+                getClientIpAddress(request),
+                extractDomainFromRequest(request),
+                request.getHeader("User-Agent"),
+                responseStatus,
+                responseTimeMs,
+                errorMessage
+            );
             
-            log.info("Successfully logged failed API request for key: {}", apiKey.getId());
+            log.info("✅ Successfully tracked failed /rivofetch call for API key: {}", apiKey.getId());
             
         } catch (Exception e) {
-            log.error("Failed to log failed API request for key: {} - Error: {}", apiKey.getId(), e.getMessage(), e);
+            log.error("Failed to track failed API request for key: {} - Error: {}", apiKey.getId(), e.getMessage(), e);
         }
     }
     
@@ -510,5 +515,35 @@ public class SecureAccessController {
         }
         
         return request.getRemoteAddr();
+    }
+    
+    /**
+     * Extract domain from request headers
+     */
+    private String extractDomainFromRequest(HttpServletRequest request) {
+        // Try Origin header first
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.isEmpty()) {
+            try {
+                return new java.net.URL(origin).getHost();
+            } catch (Exception e) {
+                // Fallback to raw origin if URL parsing fails
+                return origin;
+            }
+        }
+        
+        // Try Referer header as fallback
+        String referer = request.getHeader("Referer");
+        if (referer != null && !referer.isEmpty()) {
+            try {
+                return new java.net.URL(referer).getHost();
+            } catch (Exception e) {
+                // Fallback to raw referer if URL parsing fails
+                return referer;
+            }
+        }
+        
+        // Return null if no domain found
+        return null;
     }
 }

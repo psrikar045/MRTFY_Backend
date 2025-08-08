@@ -219,8 +219,9 @@ public class MonthlyUsageTrackingService {
     
     /**
      * Create new monthly usage record
+     * ✅ DEBUGGING: Extended timeout for debugging sessions (2 minutes)
      */
-    @Transactional
+    @Transactional(timeout = 120)
     public ApiKeyMonthlyUsage createMonthlyUsageRecord(UUID apiKeyId, String userId, String monthYear, UserPlan plan) {
         int quotaLimit = plan.getMonthlyApiCalls();
         int graceLimit = plan.getGraceLimit("api_calls");

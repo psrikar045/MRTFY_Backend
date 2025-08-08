@@ -2,10 +2,13 @@ package com.example.jwtauthenticator.repository;
 
 import com.example.jwtauthenticator.entity.ApiKeyMonthlyUsage;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -48,7 +51,19 @@ public interface ApiKeyMonthlyUsageRepository extends JpaRepository<ApiKeyMonthl
      * Get total API calls for user in current month
      */
     @Query("SELECT COALESCE(SUM(u.totalCalls), 0) FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
-    Integer getTotalCallsForUserInMonth(@Param("userId") String userId, @Param("monthYear") String monthYear);
+    Integer getTotalCallsForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
+    
+    /**
+     * Get successful API calls for user in current month
+     */
+    @Query("SELECT COALESCE(SUM(u.successfulCalls), 0) FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
+    Integer getSuccessfulCallsForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
+    
+    /**
+     * Get failed API calls for user in current month
+     */
+    @Query("SELECT COALESCE(SUM(u.failedCalls), 0) FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
+    Integer getFailedCallsForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
     
     /**
      * Get total API calls for API key in current month
@@ -139,8 +154,10 @@ public interface ApiKeyMonthlyUsageRepository extends JpaRepository<ApiKeyMonthl
 
     /**
      * Get total quota limit for user in specific month
+     * NOTE: This should be replaced with user plan-based calculation
+     * This query is kept for backward compatibility but should not be used for quota limits
      */
-    @Query("SELECT COALESCE(SUM(CASE WHEN u.quotaLimit > 0 THEN u.quotaLimit ELSE 1000 END), 1000) " +
+    @Query("SELECT COALESCE(SUM(CASE WHEN u.quotaLimit > 0 THEN u.quotaLimit ELSE 100 END), 100) " +
            "FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
     Long getTotalQuotaLimitForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
 
@@ -150,4 +167,46 @@ public interface ApiKeyMonthlyUsageRepository extends JpaRepository<ApiKeyMonthl
     @Query("SELECT COALESCE(SUM(u.totalCalls), 0) " +
            "FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")
     Long getTotalUsedQuotaForUser(@Param("userId") String userId, @Param("monthYear") String monthYear);
+
+    // ==================== DUPLICATE PREVENTION METHODS ====================
+    
+    /**
+     * Find usage record with pessimistic lock to prevent race conditions
+     */
+    @Query("SELECT u FROM ApiKeyMonthlyUsage u WHERE u.apiKeyId = :apiKeyId AND u.monthYear = :monthYear")
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<ApiKeyMonthlyUsage> findByApiKeyIdAndMonthYearForUpdate(@Param("apiKeyId") UUID apiKeyId, @Param("monthYear") String monthYear);
+    
+    /**
+     * Atomic increment for successful calls - prevents race conditions
+     */
+    @Modifying
+    @Query("UPDATE ApiKeyMonthlyUsage u SET " +
+           "u.successfulCalls = u.successfulCalls + 1, " +
+           "u.totalCalls = u.totalCalls + 1, " +
+           "u.lastCallAt = CURRENT_TIMESTAMP " +
+           "WHERE u.id = :id")
+    int incrementSuccessfulCalls(@Param("id") UUID id);
+    
+    /**
+     * Atomic increment for failed calls - prevents race conditions
+     */
+    @Modifying
+    @Query("UPDATE ApiKeyMonthlyUsage u SET " +
+           "u.failedCalls = u.failedCalls + 1, " +
+           "u.totalCalls = u.totalCalls + 1, " +
+           "u.lastCallAt = CURRENT_TIMESTAMP " +
+           "WHERE u.id = :id")
+    int incrementFailedCalls(@Param("id") UUID id);
+    
+    /**
+     * Atomic increment for quota exceeded calls - prevents race conditions
+     */
+    @Modifying
+    @Query("UPDATE ApiKeyMonthlyUsage u SET " +
+           "u.quotaExceededCalls = u.quotaExceededCalls + 1, " +
+           "u.totalCalls = u.totalCalls + 1, " +
+           "u.lastCallAt = CURRENT_TIMESTAMP " +
+           "WHERE u.id = :id")
+    int incrementQuotaExceededCalls(@Param("id") UUID id);
 }

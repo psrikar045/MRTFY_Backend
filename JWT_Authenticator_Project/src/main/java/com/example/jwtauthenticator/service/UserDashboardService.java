@@ -5,7 +5,11 @@ import com.example.jwtauthenticator.repository.ApiKeyMonthlyUsageRepository;
 import com.example.jwtauthenticator.repository.ApiKeyRequestLogRepository;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.UserDashboardSummaryRepository;
+import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.entity.UserDashboardSummaryView;
+import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.enums.UserPlan;
+import com.example.jwtauthenticator.enums.RateLimitTier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -32,36 +36,41 @@ public class UserDashboardService {
     private final ApiKeyRequestLogRepository requestLogRepository;
     private final ApiKeyMonthlyUsageRepository monthlyUsageRepository;
     private final ApiKeyRepository apiKeyRepository;
+    private final UserRepository userRepository;
 
     /**
-     * Get user dashboard cards with caching for performance
-     * Mixed approach: try materialized view first, fallback to real-time calculation
+     * Get user dashboard cards with SMART CACHING
+     * Short cache TTL (30 seconds) for balance between accuracy and performance
      */
     @Cacheable(value = "userDashboardCards", key = "#userId", unless = "#result == null", cacheManager = "dashboardCacheManager")
     public UserDashboardCardsDTO getUserDashboardCards(String userId) {
-        log.debug("Fetching dashboard cards for user: {}", userId);
+        log.info("🔄 Fetching dashboard cards for user: {} (30-second cache TTL)", userId);
 
         try {
-            // Try to get from view first (fast path)
-            Optional<UserDashboardSummaryView> summaryOpt = 
-                dashboardSummaryRepository.findByUserFkId(userId);
-
-            if (summaryOpt.isPresent()) {
-                log.debug("Using view data for user: {}", userId);
-                return buildDashboardFromSummary(userId, summaryOpt.get());
-            } else {
-                log.debug("View data not available, calculating real-time for user: {}", userId);
-                return calculateRealTimeDashboard(userId);
-            }
+            // PRIORITY: Real-time calculation for accuracy
+            log.info("Calculating real-time dashboard for maximum accuracy for user: {}", userId);
+            UserDashboardCardsDTO result = calculateRealTimeDashboard(userId);
+            log.info("✅ Real-time dashboard calculated successfully for user: {}", userId);
+            return result;
 
         } catch (Exception e) {
-            log.warn("Error fetching dashboard from view for user {}: {}, falling back to real-time calculation", userId, e.getMessage());
-            // Return fallback real-time calculation
+            log.warn("Real-time calculation failed for user {}: {}, trying materialized view fallback", userId, e.getMessage());
+            
+            // Fallback to materialized view only if real-time fails
             try {
-                return calculateRealTimeDashboard(userId);
+                Optional<UserDashboardSummaryView> summaryOpt = 
+                    dashboardSummaryRepository.findByUserId(userId);
+
+                if (summaryOpt.isPresent()) {
+                    log.info("Using materialized view as fallback for user: {}", userId);
+                    return buildDashboardFromSummary(userId, summaryOpt.get());
+                } else {
+                    log.warn("No materialized view data available for user: {}", userId);
+                    return createEmptyDashboard();
+                }
+
             } catch (Exception fallbackError) {
-                log.error("Real-time calculation also failed for user {}: {}", userId, fallbackError.getMessage(), fallbackError);
-                // Return empty dashboard as last resort
+                log.error("Both real-time and materialized view failed for user {}: {}", userId, fallbackError.getMessage(), fallbackError);
                 return createEmptyDashboard();
             }
         }
@@ -71,28 +80,30 @@ public class UserDashboardService {
      * Build dashboard from materialized view data (fast path)
      */
     private UserDashboardCardsDTO buildDashboardFromSummary(String userId, UserDashboardSummaryView summary) {
+        log.debug("Building dashboard from summary view for user: {}", userId);
+
         return UserDashboardCardsDTO.builder()
                 .totalApiCalls(buildApiCallsCard(
                     summary.getTotalCalls30Days(),
                     summary.getTotalCallsPrevious30Days()
                 ))
                 .activeDomains(buildActiveDomainsCard(
-                    summary.getActiveDomainsCount(),
-                    summary.getActiveDomainsPreviousCount()
+                    summary.getActiveDomains() != null ? summary.getActiveDomains().intValue() : 0,
+                    summary.getActiveDomainsPrevious() != null ? summary.getActiveDomainsPrevious().intValue() : 0
                 ))
                 .domainsAdded(buildDomainsAddedCard(
-                    summary.getDomainsAddedThisMonth(),
-                    summary.getDomainsAddedPreviousMonth()
+                    summary.getDomainsAddedThisMonth() != null ? summary.getDomainsAddedThisMonth().intValue() : 0,
+                    summary.getDomainsAddedPreviousMonth() != null ? summary.getDomainsAddedPreviousMonth().intValue() : 0
                 ))
                 .remainingQuota(buildRemainingQuotaCard(
                     userId,
-                    summary.getRemainingQuotaTotal(),
-                    summary.getRemainingQuotaPreviousMonth(),
+                    summary.getRemainingQuota(),
+                    summary.getRemainingQuotaPrevious() != null ? summary.getRemainingQuotaPrevious() : 0L,
                     summary.getTotalCalls30Days()
                 ))
                 .lastUpdated(LocalDateTime.now())
-                .successRate(summary.getSuccessRate30Days())
-                .totalApiKeys(summary.getTotalApiKeys())
+                .successRate(summary.getSuccessRate())
+                .totalApiKeys(summary.getTotalApiKeys() != null ? summary.getTotalApiKeys().intValue() : 0)
                 .build();
     }
 
@@ -114,6 +125,7 @@ public class UserDashboardService {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             
             // Parallel computation using CompletableFuture with Virtual Threads
+            // Use request logs for ACCURATE data (monthly usage was inflated by rate limit checks)
             var currentCallsTask = CompletableFuture.supplyAsync(() -> 
                 requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, thirtyDaysAgo, now), executor);
                 
@@ -147,6 +159,10 @@ public class UserDashboardService {
             // Wait for all tasks to complete and build dashboard
             var currentCalls = currentCallsTask.join();
             var previousCalls = previousCallsTask.join();
+            
+            // Handle null values from database
+            currentCalls = currentCalls != null ? currentCalls : 0L;
+            previousCalls = previousCalls != null ? previousCalls : 0L;
             var activeDomains = activeDomainsTask.join();
             var previousActiveDomains = previousActiveDomainsTask.join();
             var domainsAddedThisMonth = domainsAddedThisMonthTask.join();
@@ -156,6 +172,8 @@ public class UserDashboardService {
             var successRate = successRateTask.join();
             var totalApiKeys = totalApiKeysTask.join();
             
+            log.info("📊 FIXED User Dashboard Data Sources for user {}: currentCalls={} (from request_logs - ACCURATE), previousCalls={} (from request_logs)", 
+                     userId, currentCalls, previousCalls);
             log.debug("Dashboard calculation results for user {}: currentCalls={}, previousCalls={}, activeDomains={}, previousActiveDomains={}, domainsAddedThisMonth={}, domainsAddedPreviousMonth={}, remainingQuota={}, previousRemainingQuota={}, successRate={}, totalApiKeys={}", 
                      userId, currentCalls, previousCalls, activeDomains, previousActiveDomains, domainsAddedThisMonth, domainsAddedPreviousMonth, remainingQuota, previousRemainingQuota, successRate, totalApiKeys);
             
@@ -188,9 +206,11 @@ public class UserDashboardService {
             }
             
             long executionTime = System.currentTimeMillis() - startTime;
-            log.debug("Dashboard calculation completed for user {} in {}ms", userId, executionTime);
+            log.info("📊 Dashboard calculation completed for user {} in {}ms", userId, executionTime);
+            log.info("📈 Final calculated values: currentCalls={}, activeDomains={}, remainingQuota={}, successRate={}, totalApiKeys={}", 
+                     currentCalls, activeDomains, remainingQuota, successRate, totalApiKeys);
             
-            return UserDashboardCardsDTO.builder()
+            UserDashboardCardsDTO result = UserDashboardCardsDTO.builder()
                     .totalApiCalls(buildApiCallsCard(currentCalls, previousCalls))
                     .activeDomains(buildActiveDomainsCard(activeDomains, previousActiveDomains))
                     .domainsAdded(buildDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
@@ -199,6 +219,9 @@ public class UserDashboardService {
                     .successRate(successRate)
                     .totalApiKeys(totalApiKeys)
                     .build();
+            
+            log.info("🎯 Returning dashboard result for user: {}", userId);
+            return result;
         }
     }
 
@@ -278,28 +301,36 @@ public class UserDashboardService {
         Double percentageChange = calculatePercentageChange(remainingQuota, previousRemaining);
         String trend = determineTrend(percentageChange);
         
-        // Get accurate total quota from monthly usage records
+        // Get user's plan-based quota limit (CORRECT APPROACH)
         String currentMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
-        Long totalQuotaLimit = monthlyUsageRepository.getTotalQuotaLimitForUser(userId, currentMonth);
         Long totalUsedQuota = monthlyUsageRepository.getTotalUsedQuotaForUser(userId, currentMonth);
+        totalUsedQuota = totalUsedQuota != null ? totalUsedQuota : 0L;
         
-        log.debug("Quota calculation for user {}: remainingQuota={}, currentUsage={}, totalQuotaLimit={}, totalUsedQuota={}", 
-                 userId, remainingQuota, currentUsage, totalQuotaLimit, totalUsedQuota);
+        // Get user's plan to determine correct quota limit
+        Long totalQuotaLimit = getUserPlanQuotaLimit(userId);
         
-        // Use the more accurate values if available
-        if (totalQuotaLimit != null && totalQuotaLimit > 0) {
-            totalUsedQuota = totalUsedQuota != null ? totalUsedQuota : 0L;
+        // Calculate remaining quota based on user's plan
+        if (totalQuotaLimit == -1L) {
+            // BUSINESS plan - unlimited
+            remainingQuota = -1L; // Unlimited
+            currentUsage = totalUsedQuota;
+        } else {
+            // FREE (100) or PRO (1000) plan - limited
             remainingQuota = Math.max(0L, totalQuotaLimit - totalUsedQuota);
             currentUsage = totalUsedQuota;
-            log.debug("Using monthly usage data: totalQuotaLimit={}, totalUsedQuota={}, calculatedRemaining={}", 
-                     totalQuotaLimit, totalUsedQuota, remainingQuota);
-        } else {
-            // Fallback to calculated values
-            totalQuotaLimit = remainingQuota + currentUsage;
-            log.debug("Using fallback calculation: totalQuotaLimit={}", totalQuotaLimit);
         }
         
-        Double usagePercentage = totalQuotaLimit > 0 ? (currentUsage.doubleValue() / totalQuotaLimit.doubleValue()) * 100.0 : 0.0;
+        log.info("✅ CORRECT Quota calculation for user {}: plan-based totalQuotaLimit={}, totalUsedQuota={}, calculatedRemaining={}", 
+                 userId, totalQuotaLimit, totalUsedQuota, remainingQuota);
+        
+        Double usagePercentage;
+        if (totalQuotaLimit == -1L) {
+            usagePercentage = 0.0; // Unlimited plan shows 0% usage
+        } else if (totalQuotaLimit > 0) {
+            usagePercentage = (currentUsage.doubleValue() / totalQuotaLimit.doubleValue()) * 100.0;
+        } else {
+            usagePercentage = 0.0;
+        }
         
         // Estimate days remaining
         Integer estimatedDays = estimateDaysRemaining(remainingQuota, currentUsage);
@@ -374,8 +405,23 @@ public class UserDashboardService {
     // Additional helper methods that need to be implemented in repositories
 
     private Long calculateRemainingQuotaForUser(String userId, String monthYear) {
-        // This would need a custom query in the repository
-        return monthlyUsageRepository.getTotalRemainingQuotaForUser(userId, monthYear);
+        // Use plan-based calculation with ACCURATE data from request logs
+        Long planQuotaLimit = getUserPlanQuotaLimit(userId);
+        
+        // ✅ FIXED: Use request logs for accurate usage count (not inflated monthly usage)
+        LocalDateTime monthStart = LocalDate.parse(monthYear + "-01").atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1).minusSeconds(1);
+        Long totalUsedQuota = requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, monthStart, monthEnd);
+        totalUsedQuota = totalUsedQuota != null ? totalUsedQuota : 0L;
+        
+        log.debug("📊 FIXED Quota Calculation for user {}: planLimit={}, usedQuota={} (from request_logs - ACCURATE)", 
+                  userId, planQuotaLimit, totalUsedQuota);
+        
+        if (planQuotaLimit == -1L) {
+            return -1L; // Unlimited for BUSINESS plan
+        } else {
+            return Math.max(0L, planQuotaLimit - totalUsedQuota);
+        }
     }
 
     private Double calculateSuccessRateForUser(String userId, LocalDateTime from, LocalDateTime to) {
@@ -436,5 +482,30 @@ public class UserDashboardService {
         log.info("Force refreshing dashboard cards for user: {}", userId);
         // Cache is automatically evicted by @CacheEvict annotation
         return calculateRealTimeDashboard(userId);
+    }
+    
+    /**
+     * Get user's plan-based quota limit
+     * FREE: 100, PRO: 1000, BUSINESS: -1 (unlimited)
+     */
+    private Long getUserPlanQuotaLimit(String userId) {
+        try {
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                UserPlan plan = user.getPlan() != null ? user.getPlan() : UserPlan.FREE;
+                RateLimitTier tier = RateLimitTier.fromUserPlan(plan);
+                
+                long quotaLimit = tier.isUnlimited() ? -1L : tier.getRequestsPerMonth();
+                log.debug("User {} has plan {} with quota limit: {}", userId, plan, quotaLimit);
+                return quotaLimit;
+            } else {
+                log.warn("User {} not found, defaulting to FREE plan (100 requests)", userId);
+                return 100L; // Default to FREE plan
+            }
+        } catch (Exception e) {
+            log.error("Error getting user plan for {}: {}, defaulting to FREE plan", userId, e.getMessage());
+            return 100L; // Default to FREE plan on error
+        }
     }
 }

@@ -406,12 +406,32 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     
     /**
      * INTEGRATION: Log API key request asynchronously.
+     * ✅ FIXED: Extract request data before async call to prevent request recycling
+     * ✅ FIXED: Skip logging for /rivofetch endpoint to prevent duplicates
      */
     private void logRequestAsync(String apiKeyId, String userFkId, HttpServletRequest request, 
                                 HttpServletResponse response, boolean success) {
         if (requestLoggingService != null && apiKeyId != null) {
             try {
-                requestLoggingService.logApiKeyRequest(apiKeyId, userFkId, request, response, success);
+                // ✅ FIXED: Skip logging for rivofetch endpoint - it's handled by StreamlinedUsageTracker
+                String path = request.getRequestURI();
+                if (path != null && path.contains("/rivofetch")) {
+                    log.debug("Skipping duplicate logging for rivofetch endpoint: {}", path);
+                    return;
+                }
+                
+                // ✅ Extract all request data BEFORE async call
+                String method = request.getMethod();
+                String clientIp = getClientIpAddress(request);
+                String origin = request.getHeader("Origin");
+                String referer = request.getHeader("Referer");
+                String domain = origin != null ? extractDomain(origin) : extractDomain(referer);
+                String userAgent = request.getHeader("User-Agent");
+                int responseStatus = response.getStatus();
+                
+                // ✅ Call async method with extracted data (no request objects)
+                requestLoggingService.logApiKeyRequest(apiKeyId, userFkId, method, path, 
+                                                     clientIp, domain, userAgent, responseStatus, success);
             } catch (Exception e) {
                 log.warn("Failed to log API key request for key: {}", apiKeyId, e);
             }

@@ -260,6 +260,30 @@ public class ApiKeyController {
             
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
             
+        } catch (org.springframework.transaction.TransactionTimedOutException e) {
+            log.error("❌ Transaction timeout creating API key for user '{}': {}", userFkId, e.getMessage());
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Request timed out. Please try again in a few moments.");
+            errorResponse.put("errorCode", "TRANSACTION_TIMEOUT");
+            errorResponse.put("retryAfter", 30);
+            errorResponse.put("timestamp", java.time.Instant.now().toString());
+            
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(errorResponse);
+            
+        } catch (org.springframework.transaction.UnexpectedRollbackException e) {
+            log.error("❌ Transaction rollback creating API key for user '{}': {}", userFkId, e.getMessage());
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Transaction was rolled back. Please try again.");
+            errorResponse.put("errorCode", "TRANSACTION_ROLLBACK");
+            errorResponse.put("retryAfter", 10);
+            errorResponse.put("timestamp", java.time.Instant.now().toString());
+            
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+            
         } catch (Exception e) {
             log.error("❌ Unexpected error creating API key for user '{}': {}", userFkId, e.getMessage(), e);
             

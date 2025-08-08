@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entity for user_dashboard_summary materialized view
+ * ✅ UPDATED: Matches new view structure based on usage_stats table
  * Read-only entity for dashboard performance
  */
 @Entity
@@ -19,39 +20,79 @@ import java.time.LocalDateTime;
 public class UserDashboardSummaryView {
 
     @Id
-    @Column(name = "user_fk_id")
-    private String userFkId;
+    @Column(name = "user_id")
+    private String userId;
 
+    // API Calls Metrics
     @Column(name = "total_calls_30_days")
     private Long totalCalls30Days;
 
     @Column(name = "total_calls_previous_30_days")
     private Long totalCallsPrevious30Days;
 
-    @Column(name = "active_domains_count")
-    private Integer activeDomainsCount;
+    @Column(name = "calls_percentage_change")
+    private Double callsPercentageChange;
 
-    @Column(name = "active_domains_previous_count")
-    private Integer activeDomainsPreviousCount;
+    // Active Domains Metrics
+    @Column(name = "active_domains")
+    private Long activeDomains;
 
+    @Column(name = "active_domains_previous")
+    private Long activeDomainsPrevious;
+
+    @Column(name = "domains_percentage_change")
+    private Double domainsPercentageChange;
+
+    // Domains Added Metrics
     @Column(name = "domains_added_this_month")
-    private Integer domainsAddedThisMonth;
+    private Long domainsAddedThisMonth;
 
     @Column(name = "domains_added_previous_month")
-    private Integer domainsAddedPreviousMonth;
+    private Long domainsAddedPreviousMonth;
 
-    @Column(name = "remaining_quota_total")
-    private Long remainingQuotaTotal;
+    @Column(name = "domains_added_percentage_change")
+    private Double domainsAddedPercentageChange;
 
-    @Column(name = "remaining_quota_previous_month")
-    private Long remainingQuotaPreviousMonth;
+    // Quota Metrics
+    @Column(name = "remaining_quota")
+    private Long remainingQuota;
+
+    @Column(name = "remaining_quota_previous")
+    private Long remainingQuotaPrevious;
+
+    @Column(name = "quota_percentage_change")
+    private Double quotaPercentageChange;
+
+    @Column(name = "total_calls_current_month")
+    private Long totalCallsCurrentMonth;
+
+    @Column(name = "total_quota_current_month")
+    private Long totalQuotaCurrentMonth;
+
+    @Column(name = "quota_usage_percentage")
+    private Double quotaUsagePercentage;
+
+    // Other Metrics
+    @Column(name = "success_rate")
+    private Double successRate;
 
     @Column(name = "total_api_keys")
-    private Integer totalApiKeys;
+    private Long totalApiKeys;
 
     @Column(name = "last_activity")
     private LocalDateTime lastActivity;
 
-    @Column(name = "success_rate_30_days")
-    private Double successRate30Days;
+    // Status Indicators
+    @Column(name = "activity_status")
+    private String activityStatus;
+
+    @Column(name = "quota_status")
+    private String quotaStatus;
+
+    // Metadata
+    @Column(name = "last_updated")
+    private LocalDateTime lastUpdated;
+
+    @Column(name = "data_source")
+    private String dataSource;
 }

@@ -41,6 +41,22 @@ public class ModernDashboardConfig {
         return Executors.newFixedThreadPool(processors);
     }
 
+    /**
+     * 🔐 Transactional Async Executor for Database Operations
+     * Uses platform threads that properly handle Spring transaction context
+     * Specifically designed for @Async @Transactional methods
+     */
+    @Bean(name = "transactionalAsyncExecutor")
+    public Executor transactionalAsyncExecutor() {
+        log.info("🔐 Configuring Transactional Async Executor for Database Operations");
+        return Executors.newFixedThreadPool(4, r -> {
+            Thread t = new Thread(r);
+            t.setName("transactional-async-" + t.getId());
+            t.setDaemon(false); // Ensure threads stay alive for transaction completion
+            return t;
+        });
+    }
+
     // NOTE: Dashboard cache manager is now configured in CacheConfig.java
     // This avoids bean conflicts and centralizes cache configuration
 

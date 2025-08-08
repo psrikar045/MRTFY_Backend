@@ -4,10 +4,8 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -21,11 +19,11 @@ import java.util.concurrent.TimeUnit;
 public class CacheConfig {
 
     /**
-     * Primary cache manager using Caffeine for general application caching
+     * Secondary cache manager using Caffeine for general application caching
      * High-performance cache with automatic eviction and statistics
+     * Note: OptimizedCacheManager is now the primary cache manager
      */
-    @Bean
-    @Primary
+    @Bean("legacyCacheManager")
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager();
         cacheManager.setCaffeine(caffeineCacheBuilder());
@@ -38,30 +36,40 @@ public class CacheConfig {
             "brandData"              // Brand extraction cache
         ));
         
-        log.info("✅ Primary Caffeine cache manager configured with high-performance caching");
+        log.info("✅ Legacy Caffeine cache manager configured with high-performance caching");
         return cacheManager;
     }
 
     /**
-     * Dashboard-specific cache manager using ConcurrentMap for dashboard data
-     * Optimized for dashboard queries with shorter TTL
+     * Dashboard-specific cache manager using Caffeine for dashboard data
+     * Optimized for dashboard queries with SHORT TTL for real-time accuracy
      */
     @Bean("dashboardCacheManager")
     public CacheManager dashboardCacheManager() {
-        ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+        cacheManager.setCaffeine(dashboardCaffeineCacheBuilder());
         
         // Configure cache names for dashboard
         cacheManager.setCacheNames(java.util.Arrays.asList(
-            "userDashboardCards",    // User dashboard cards cache (5 min TTL)
-            "apiKeyDashboard",       // API key dashboard cache (3 min TTL)
-            "dashboardSummary"       // General dashboard summary cache (10 min TTL)
+            "userDashboardCards",    // User dashboard cards cache (30 sec TTL)
+            "apiKeyDashboard",       // API key dashboard cache (30 sec TTL)
+            "dashboardSummary"       // General dashboard summary cache (60 sec TTL)
         ));
         
-        // Allow dynamic cache creation
-        cacheManager.setAllowNullValues(false);
-        
-        log.info("✅ Dashboard cache manager configured for dashboard-specific caching");
+        log.info("✅ Dashboard cache manager configured with 30-second TTL for real-time accuracy");
         return cacheManager;
+    }
+    
+    /**
+     * Caffeine cache builder specifically for dashboard data
+     * Short TTL for real-time accuracy while maintaining performance
+     */
+    private Caffeine<Object, Object> dashboardCaffeineCacheBuilder() {
+        return Caffeine.newBuilder()
+                .initialCapacity(50)
+                .maximumSize(500)
+                .expireAfterWrite(30, TimeUnit.SECONDS)  // 30-second TTL for real-time accuracy
+                .recordStats();
     }
 
     private Caffeine<Object, Object> caffeineCacheBuilder() {
@@ -73,27 +81,19 @@ public class CacheConfig {
     }
 
     /**
-     * Scheduled task to clear old dashboard cache entries
-     * Runs every 10 minutes to prevent memory buildup
+     * Scheduled task to log dashboard cache statistics
+     * Runs every 5 minutes to monitor cache performance
+     * Note: No manual clearing needed as Caffeine handles TTL automatically
      */
-    @Scheduled(fixedRate = 600000) // 10 minutes
-    public void clearOldDashboardCacheEntries() {
+    @Scheduled(fixedRate = 300000) // 5 minutes
+    public void logDashboardCacheStatistics() {
         try {
-            CacheManager dashboardCacheManager = dashboardCacheManager();
-            
-            // Clear specific caches periodically to ensure fresh data
-            if (dashboardCacheManager.getCache("userDashboardCards") != null) {
-                dashboardCacheManager.getCache("userDashboardCards").clear();
-                log.debug("🧹 Cleared userDashboardCards cache");
-            }
-            
-            if (dashboardCacheManager.getCache("apiKeyDashboard") != null) {
-                dashboardCacheManager.getCache("apiKeyDashboard").clear();
-                log.debug("🧹 Cleared apiKeyDashboard cache");
-            }
+            log.info("📊 Dashboard Cache Statistics (30-second TTL):");
+            log.info("  - Cache automatically expires entries after 30 seconds for real-time accuracy");
+            log.info("  - Dashboard cache manager: {} caches configured", dashboardCacheManager().getCacheNames().size());
             
         } catch (Exception e) {
-            log.error("❌ Failed to clear dashboard cache entries: {}", e.getMessage(), e);
+            log.error("❌ Failed to log dashboard cache statistics: {}", e.getMessage(), e);
         }
     }
 
@@ -105,7 +105,7 @@ public class CacheConfig {
     public void logCacheStatistics() {
         try {
             log.info("📊 Cache Statistics:");
-            log.info("  - Primary cache manager: {} caches", cacheManager().getCacheNames().size());
+            log.info("  - Legacy cache manager: {} caches", cacheManager().getCacheNames().size());
             log.info("  - Dashboard cache manager: {} caches", dashboardCacheManager().getCacheNames().size());
             
         } catch (Exception e) {

@@ -28,8 +28,9 @@ public class DashboardMaintenanceService {
     /**
      * Modern dashboard maintenance using Virtual Threads (Java 21)
      * Performs asynchronous maintenance tasks for optimal performance
+     * ✅ FIXED: Reduced frequency to prevent connection pool contention during API key creation
      */
-    @Scheduled(fixedRate = 300000) // 5 minutes
+    @Scheduled(fixedRate = 900000) // 15 minutes (reduced from 5 minutes)
     public void refreshDashboardViews() {
         // Use Virtual Threads for non-blocking maintenance
         CompletableFuture.runAsync(() -> {
@@ -68,7 +69,7 @@ public class DashboardMaintenanceService {
                 FROM pg_class c 
                 JOIN pg_namespace n ON n.oid = c.relnamespace 
                 WHERE n.nspname = 'public' 
-                AND c.relname IN ('api_key_request_logs', 'api_key_monthly_usage', 'api_keys')
+                AND c.relname IN ('api_key_request_logs', 'api_key_usage_stats', 'api_keys')
                 """);
             
             var results = query.getResultList();
@@ -111,7 +112,7 @@ public class DashboardMaintenanceService {
                 SELECT schemaname, tablename, attname, n_distinct, correlation
                 FROM pg_stats 
                 WHERE schemaname = 'public' 
-                AND tablename IN ('api_key_request_logs', 'api_key_monthly_usage', 'api_keys')
+                AND tablename IN ('api_key_request_logs', 'api_key_usage_stats', 'api_keys')
                 AND n_distinct > 100
                 ORDER BY n_distinct DESC
                 LIMIT 10

@@ -348,21 +348,109 @@ public class FileStorageService {
     
     /**
      * Generate storage path for brand asset
+     * ✅ FIXED: Sanitize filename to remove URL parameters and invalid characters
      */
     private String generateAssetPath(BrandAsset asset) {
+        String sanitizedFileName = sanitizeFileName(asset.getFileName(), asset.getOriginalUrl());
         return String.format("brands/%d/assets/%s_%s", 
                 asset.getBrand().getId(), 
                 asset.getAssetType().name().toLowerCase(),
-                asset.getFileName());
+                sanitizedFileName);
     }
     
     /**
      * Generate storage path for brand image
+     * ✅ FIXED: Sanitize filename to remove URL parameters and invalid characters
      */
     private String generateImagePath(BrandImage image) {
+        String sanitizedFileName = sanitizeFileName(image.getFileName(), image.getSourceUrl());
         return String.format("brands/%d/images/%s", 
                 image.getBrand().getId(), 
-                image.getFileName());
+                sanitizedFileName);
+    }
+
+    /**
+     * ✅ NEW: Sanitize filename to remove URL parameters and invalid filesystem characters
+     * 
+     * @param fileName Original filename (may contain URL parameters)
+     * @param originalUrl Fallback URL to extract filename from if needed
+     * @return Clean, filesystem-safe filename
+     */
+    private String sanitizeFileName(String fileName, String originalUrl) {
+        String cleanFileName = fileName;
+        
+        // If fileName is null or empty, extract from URL
+        if (cleanFileName == null || cleanFileName.trim().isEmpty()) {
+            if (originalUrl != null) {
+                cleanFileName = extractFileNameFromUrl(originalUrl);
+            } else {
+                cleanFileName = "unknown_file";
+            }
+        }
+        
+        // Remove URL parameters (everything after ?)
+        int paramIndex = cleanFileName.indexOf('?');
+        if (paramIndex > 0) {
+            cleanFileName = cleanFileName.substring(0, paramIndex);
+        }
+        
+        // Remove hash fragments (everything after #)
+        int hashIndex = cleanFileName.indexOf('#');
+        if (hashIndex > 0) {
+            cleanFileName = cleanFileName.substring(0, hashIndex);
+        }
+        
+        // Replace invalid filesystem characters with underscores
+        cleanFileName = cleanFileName.replaceAll("[<>:\"/\\\\|?*]", "_");
+        
+        // Remove any remaining special characters that might cause issues
+        cleanFileName = cleanFileName.replaceAll("[&=%;]", "_");
+        
+        // Ensure filename is not empty
+        if (cleanFileName.trim().isEmpty()) {
+            cleanFileName = "sanitized_file";
+        }
+        
+        // Add file extension if missing
+        if (!cleanFileName.contains(".") && originalUrl != null) {
+            String extension = extractFileExtensionFromUrl(originalUrl);
+            if (extension != null) {
+                cleanFileName += "." + extension;
+            }
+        }
+        
+        return cleanFileName;
+    }
+    
+    /**
+     * Extract filename from URL
+     */
+    private String extractFileNameFromUrl(String url) {
+        try {
+            // Remove parameters first
+            String urlWithoutParams = url.split("\\?")[0];
+            String fileName = urlWithoutParams.substring(urlWithoutParams.lastIndexOf('/') + 1);
+            return fileName.isEmpty() ? "extracted_file" : fileName;
+        } catch (Exception e) {
+            return "url_file";
+        }
+    }
+    
+    /**
+     * Extract file extension from URL
+     */
+    private String extractFileExtensionFromUrl(String url) {
+        try {
+            // Remove parameters first
+            String urlWithoutParams = url.split("\\?")[0];
+            String fileName = urlWithoutParams.substring(urlWithoutParams.lastIndexOf('/') + 1);
+            if (fileName.contains(".")) {
+                return fileName.substring(fileName.lastIndexOf('.') + 1);
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
     }
     
     /**
