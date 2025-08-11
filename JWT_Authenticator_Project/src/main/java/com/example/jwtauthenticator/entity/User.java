@@ -1,19 +1,26 @@
 package com.example.jwtauthenticator.entity;
 
-import com.example.jwtauthenticator.enums.UserPlan;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.hibernate.annotations.GenericGenerator;
-
-import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.UUID;
+
+import com.example.jwtauthenticator.enums.UserPlan;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @Builder
@@ -80,6 +87,9 @@ public class User {
     @Column(name = "email_verified")
     private boolean emailVerified;
 
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true; // Default to active
+
     @Column(name = "verification_token")
     private String verificationToken;
 
@@ -123,6 +133,11 @@ public class User {
             monthlyResetDate = LocalDate.now(); // Reset on signup date each month
         }
         
+        // Initialize isActive field
+        if (isActive == null) {
+            isActive = true; // Default to active
+        }
+        
         // Only set emailVerified to false if it hasn't been explicitly set
         // This allows Google users to have emailVerified = true
         if (authProvider == null) {
@@ -164,6 +179,9 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+          if (isActive == null) {
+            isActive = true; // Default to active
+        }
     }
 
     // Plan-related helper methods

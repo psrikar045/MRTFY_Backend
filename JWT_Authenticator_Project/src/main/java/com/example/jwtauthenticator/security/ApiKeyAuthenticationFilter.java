@@ -4,6 +4,7 @@ import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.enums.ApiKeyScope;
 import com.example.jwtauthenticator.enums.RateLimitTier;
 import com.example.jwtauthenticator.service.ApiKeyService;
+import com.example.jwtauthenticator.service.RequestContextExtractorService;
 import com.example.jwtauthenticator.util.ApiKeyHashUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -45,6 +46,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     
     private final ApiKeyService apiKeyService;
     private final ApiKeyHashUtil apiKeyHashUtil;
+    private final RequestContextExtractorService requestContextExtractor; // PHASE 1 INTEGRATION
     
     // INTEGRATION: Add new services for comprehensive API key functionality
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -296,19 +298,12 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     
     /**
      * Get client IP address, considering proxy headers.
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
      */
     private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-        
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
     
     /**

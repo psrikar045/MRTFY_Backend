@@ -12,6 +12,9 @@ import com.example.jwtauthenticator.repository.BrandRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.example.jwtauthenticator.entity.ApiKey; // PHASE 3 INTEGRATION
+import jakarta.servlet.http.HttpServletRequest; // PHASE 3 INTEGRATION
+import jakarta.servlet.http.HttpServletResponse; // PHASE 3 INTEGRATION
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +43,7 @@ public class ForwardService {
     private final BrandExtractionService brandExtractionService;
     private final BrandRepository brandRepository;
     private final ObjectMapper objectMapper;
+    private final RivoFetchLoggingService rivoFetchLoggingService; // PHASE 3 INTEGRATION
     
     @Value("${app.brand-extraction.enabled:true}")
     private boolean brandExtractionEnabled;
@@ -90,6 +94,222 @@ public class ForwardService {
                         }
                     }
                     return response;
+                });
+    }
+    
+    /**
+     * 🚀 PHASE 3: Forward with RivoFetch Logging Integration
+     * 
+     * Enhanced forward method that includes comprehensive RivoFetch logging
+     * for analytics and monitoring purposes.
+     * 
+     * @param url URL to forward to external API
+     * @param request HTTP servlet request for context extraction
+     * @param response HTTP servlet response for logging
+     * @param apiKey API key used for the request
+     * @return CompletableFuture with response entity
+     */
+    public CompletableFuture<ResponseEntity<String>> forwardWithLogging(
+            String url, 
+            HttpServletRequest request, 
+            HttpServletResponse response, 
+            ApiKey apiKey) {
+        
+        long startTime = System.currentTimeMillis();
+        
+        // First check if the URL exists in the brands table
+        Optional<Brand> existingBrand = findBrandByUrl(url);
+        if (existingBrand.isPresent()) {
+            log.info("Found cached brand data for URL: {}", url);
+            try {
+                BrandExtractionResponse brandResponse = convertBrandToExtractionResponse(existingBrand.get());
+                String jsonResponse = objectMapper.writeValueAsString(brandResponse);
+                
+                // Log successful cached response (DATABASE_HIT)
+                rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
+                        request, response, apiKey, startTime, jsonResponse, "DATABASE_HIT");
+                
+                return CompletableFuture.completedFuture(ResponseEntity.ok(jsonResponse));
+            } catch (Exception e) {
+                log.error("Error converting brand data to response for URL: {}", url, e);
+                
+                // Log the error
+                rivoFetchLoggingService.logFailedRivoFetchAsync(
+                        request, apiKey, startTime, 
+                        "Brand data conversion error: " + e.getMessage(), 500);
+                
+                // Fall through to external API call on error
+            }
+        }
+
+        // Check in-memory cache as fallback
+        String cached = forwardCache.getIfPresent(url);
+        if (cached != null) {
+            log.info("Found in-memory cached data for URL: {}", url);
+            
+            // Log successful cached response (MEMORY_HIT)
+            rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
+                    request, response, apiKey, startTime, cached, "MEMORY_HIT");
+            
+            // Even for cached responses, trigger brand extraction if enabled
+            if (brandExtractionEnabled) {
+                triggerBrandExtraction(url, cached);
+            }
+            return CompletableFuture.completedFuture(ResponseEntity.ok(cached));
+        }
+
+        // Make external API call only if not found in database or cache
+        log.info("Making external API call for URL: {}", url);
+        return forwardWebClient.post()
+                .uri(EXTERNAL_API)
+                .bodyValue(Collections.singletonMap("url", url))
+                .exchangeToMono(resp -> resp.bodyToMono(String.class)
+                        .map(body -> ResponseEntity.status(resp.statusCode()).body(body)))
+                .timeout(Duration.ofSeconds(forwardConfig.getTimeoutSeconds()))
+                .doOnError(e -> {
+                    log.error("Forwarding error for URL: {}", url, e);
+                    
+                    // Log the error asynchronously
+                    rivoFetchLoggingService.logFailedRivoFetchAsync(
+                            request, apiKey, startTime, 
+                            "External API error: " + e.getMessage(), 500);
+                })
+                .toFuture()
+                .thenApply(forwardResponse -> {
+                    if (forwardResponse.getStatusCode().is2xxSuccessful()) {
+                        // Cache successful response
+                        forwardCache.put(url, forwardResponse.getBody());
+                        
+                        // Log successful response (MISS - external API call)
+                        rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
+                                request, response, apiKey, startTime, forwardResponse.getBody(), "MISS");
+                        
+                        // Trigger brand data extraction for successful responses
+                        if (brandExtractionEnabled) {
+                            triggerBrandExtraction(url, forwardResponse.getBody());
+                        }
+                    } else {
+                        // Log failed response
+                        rivoFetchLoggingService.logFailedRivoFetchAsync(
+                                request, apiKey, startTime, 
+                                "External API returned status: " + forwardResponse.getStatusCode(),
+                                forwardResponse.getStatusCode().value());
+                    }
+                    return forwardResponse;
+                })
+                .exceptionally(throwable -> {
+                    log.error("Exception in forward operation for URL: {}", url, throwable);
+                    
+                    // Log the exception
+                    rivoFetchLoggingService.logFailedRivoFetchAsync(
+                            request, apiKey, startTime, 
+                            "Forward operation exception: " + throwable.getMessage(), 500);
+                    
+                    // Return error response
+                    return ResponseEntity.status(500).body("Internal server error");
+                });
+    }
+    
+    /**
+     * 🚀 PHASE 3: Forward with RivoFetch Logging for Public Requests
+     */
+    public CompletableFuture<ResponseEntity<String>> forwardWithPublicLogging(
+            String url, 
+            HttpServletRequest request, 
+            HttpServletResponse response) {
+        
+        long startTime = System.currentTimeMillis();
+        
+        // First check if the URL exists in the brands table
+        Optional<Brand> existingBrand = findBrandByUrl(url);
+        if (existingBrand.isPresent()) {
+            log.info("Found cached brand data for URL: {}", url);
+            try {
+                BrandExtractionResponse brandResponse = convertBrandToExtractionResponse(existingBrand.get());
+                String jsonResponse = objectMapper.writeValueAsString(brandResponse);
+                
+                // Log successful cached response (DATABASE_HIT)
+                rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
+                        request, response, startTime, jsonResponse, "DATABASE_HIT");
+                
+                return CompletableFuture.completedFuture(ResponseEntity.ok(jsonResponse));
+            } catch (Exception e) {
+                log.error("Error converting brand data to response for URL: {}", url, e);
+                
+                // Log the error
+                rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
+                        request, startTime, 
+                        "Brand data conversion error: " + e.getMessage(), 500);
+                
+                // Fall through to external API call on error
+            }
+        }
+
+        // Check in-memory cache as fallback
+        String cached = forwardCache.getIfPresent(url);
+        if (cached != null) {
+            log.info("Found in-memory cached data for URL: {}", url);
+            
+            // Log successful cached response (MEMORY_HIT)
+            rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
+                    request, response, startTime, cached, "MEMORY_HIT");
+            
+            // Even for cached responses, trigger brand extraction if enabled
+            if (brandExtractionEnabled) {
+                triggerBrandExtraction(url, cached);
+            }
+            return CompletableFuture.completedFuture(ResponseEntity.ok(cached));
+        }
+
+        // Make external API call only if not found in database or cache
+        log.info("Making external API call for URL: {}", url);
+        return forwardWebClient.post()
+                .uri(EXTERNAL_API)
+                .bodyValue(Collections.singletonMap("url", url))
+                .exchangeToMono(resp -> resp.bodyToMono(String.class)
+                        .map(body -> ResponseEntity.status(resp.statusCode()).body(body)))
+                .timeout(Duration.ofSeconds(forwardConfig.getTimeoutSeconds()))
+                .doOnError(e -> {
+                    log.error("Forwarding error for URL: {}", url, e);
+                    
+                    // Log the error asynchronously
+                    rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
+                            request, startTime, 
+                            "External API error: " + e.getMessage(), 500);
+                })
+                .toFuture()
+                .thenApply(forwardResponse -> {
+                    if (forwardResponse.getStatusCode().is2xxSuccessful()) {
+                        // Cache successful response
+                        forwardCache.put(url, forwardResponse.getBody());
+                        
+                        // Log successful response (MISS - external API call)
+                        rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
+                                request, response, startTime, forwardResponse.getBody(), "MISS");
+                        
+                        // Trigger brand data extraction for successful responses
+                        if (brandExtractionEnabled) {
+                            triggerBrandExtraction(url, forwardResponse.getBody());
+                        }
+                    } else {
+                        // Log failed response
+                        rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
+                                request, startTime, 
+                                "External API returned status: " + forwardResponse.getStatusCode(),
+                                forwardResponse.getStatusCode().value());
+                    }
+                    return forwardResponse;
+                })
+                .exceptionally(throwable -> {
+                    log.error("Exception in forward operation for URL: {}", url, throwable);
+                    
+                    // Log the exception
+                    rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
+                            request, startTime, 
+                            "Forward operation exception: " + throwable.getMessage(), 500);
+                    
+                    // Return error response
+                    return ResponseEntity.status(500).body("Internal server error");
                 });
     }
     

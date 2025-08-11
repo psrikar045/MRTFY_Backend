@@ -1,7 +1,9 @@
 package com.example.jwtauthenticator.service;
+
 import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.ApiKeyRequestLog;
 import com.example.jwtauthenticator.repository.ApiKeyRequestLogRepository;
+import com.example.jwtauthenticator.service.RequestContextExtractorService.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Service for logging API key requests and validating IP/Domain restrictions.
  * Provides comprehensive analytics and security monitoring capabilities.
+ * 
+ * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified context extraction
  */
 @Service
 @RequiredArgsConstructor
@@ -28,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 public class ApiKeyRequestLogService {
 
     private final ApiKeyRequestLogRepository requestLogRepository;
+    private final RequestContextExtractorService requestContextExtractor;
 
     @Value("${app.security.ip-validation.enabled:false}")
     private boolean ipValidationEnabled;
@@ -55,14 +60,18 @@ public class ApiKeyRequestLogService {
         }
 
         try {
+            // PHASE 1 INTEGRATION: Use RequestContextExtractorService for unified context extraction
             // Extract all needed data from request before async processing to avoid recycled request issue
             
             // Debug: Log all headers for troubleshooting
             logRequestHeaders(request);
             
-            String clientIp = extractClientIp(request);
-            String domain = extractDomain(request);
-            String userAgent = request.getHeader("User-Agent");
+            // Use new unified context extractor instead of manual extraction
+            RequestContext requestContext = requestContextExtractor.extractRequestContext();
+            
+            String clientIp = requestContext.clientIp();
+            String domain = requestContext.domain();
+            String userAgent = requestContext.userAgent();
             String requestMethod = request.getMethod();
             String requestPath = request.getRequestURI();
             
@@ -91,12 +100,16 @@ public class ApiKeyRequestLogService {
         }
 
         try {
+            // PHASE 1 INTEGRATION: Use RequestContextExtractorService for unified context extraction
             // Debug: Log all headers for troubleshooting
             logRequestHeaders(request);
             
-            String clientIp = extractClientIp(request);
-            String domain = extractDomain(request);
-            String userAgent = request.getHeader("User-Agent");
+            // Use new unified context extractor instead of manual extraction
+            RequestContext requestContext = requestContextExtractor.extractRequestContext();
+            
+            String clientIp = requestContext.clientIp();
+            String domain = requestContext.domain();
+            String userAgent = requestContext.userAgent();
             String requestMethod = request.getMethod();
             String requestPath = request.getRequestURI();
 
@@ -216,83 +229,30 @@ public class ApiKeyRequestLogService {
 
     /**
      * Extract client IP from request, considering proxy headers
+     * 
+     * @deprecated Use RequestContextExtractorService.extractClientIp() instead
+     * This method now delegates to the unified RequestContextExtractorService for consistency
      */
+    @Deprecated
     public String extractClientIp(HttpServletRequest request) {
-        log.debug("Extracting client IP from request");
+        log.debug("🔄 PHASE 1 MIGRATION: Delegating extractClientIp to RequestContextExtractorService");
         
-        String[] headerNames = {
-            "X-Forwarded-For",
-            "X-Real-IP",
-            "X-Client-IP",
-            "CF-Connecting-IP", // Cloudflare
-            "True-Client-IP",   // Akamai
-            "X-Cluster-Client-IP"
-        };
-
-        // Check proxy headers first
-        for (String headerName : headerNames) {
-            String ip = request.getHeader(headerName);
-            log.debug("Checking header {}: {}", headerName, ip);
-            if (ip != null && !ip.trim().isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-                // Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs)
-                if (ip.contains(",")) {
-                    ip = ip.split(",")[0].trim();
-                }
-                if (isValidIpAddress(ip)) {
-                    log.info("Found valid IP from header {}: {}", headerName, ip);
-                    return ip;
-                }
-            }
-        }
-
-        // Fallback to remote address
-        String remoteAddr = request.getRemoteAddr();
-        log.debug("Remote address: {}", remoteAddr);
-        
-        // Handle IPv6 localhost
-        if ("0:0:0:0:0:0:0:1".equals(remoteAddr) || "::1".equals(remoteAddr)) {
-            log.info("IPv6 localhost detected, converting to IPv4");
-            return "127.0.0.1";
-        }
-        
-        // For local testing, accept localhost IPs
-        if ("127.0.0.1".equals(remoteAddr) || remoteAddr != null && remoteAddr.startsWith("192.168.")) {
-            log.info("Local/private IP detected: {}", remoteAddr);
-            return remoteAddr;
-        }
-        
-        if (isValidIpAddress(remoteAddr)) {
-            log.info("Using remote address as client IP: {}", remoteAddr);
-            return remoteAddr;
-        }
-        
-        log.warn("Could not extract valid client IP, using fallback");
-        return "127.0.0.1"; // Fallback for local testing
+        // PHASE 1 INTEGRATION: Delegate to new unified service instead of duplicating logic
+        return requestContextExtractor.extractClientIp(request);
     }
 
     /**
      * Extract domain from request
+     * 
+     * @deprecated Use RequestContextExtractorService.extractDomain() instead
+     * This method now delegates to the unified RequestContextExtractorService for consistency
      */
+    @Deprecated
     public String extractDomain(HttpServletRequest request) {
-        log.debug("Extracting domain from request");
+        log.debug("🔄 PHASE 1 MIGRATION: Delegating extractDomain to RequestContextExtractorService");
         
-        String host = request.getHeader("Host");
-        log.debug("Host header: {}", host);
-        
-        if (host == null || host.trim().isEmpty()) {
-            log.warn("Host header is null or empty");
-            // Fallback for local testing
-            return "localhost";
-        }
-
-        // Remove port if present
-        if (host.contains(":")) {
-            host = host.split(":")[0];
-        }
-
-        String domain = host.toLowerCase().trim();
-        log.info("Extracted domain: {}", domain);
-        return domain;
+        // PHASE 1 INTEGRATION: Delegate to new unified service instead of duplicating logic
+        return requestContextExtractor.extractDomain(request);
     }
 
     /**
@@ -332,39 +292,6 @@ public class ApiKeyRequestLogService {
 
         return false;
     }
-
-    /**
-     * Basic IP address validation
-     */
-    private boolean isValidIpAddress(String ip) {
-        if (ip == null || ip.trim().isEmpty()) {
-            return false;
-        }
-
-        // Accept localhost and private IPs for testing
-        if ("127.0.0.1".equals(ip) || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
-            return true;
-        }
-
-        // Basic IPv4 validation (simplified)
-        String[] parts = ip.split("\\.");
-        if (parts.length != 4) {
-            return false;
-        }
-
-        try {
-            for (String part : parts) {
-                int num = Integer.parseInt(part);
-                if (num < 0 || num > 255) {
-                    return false;
-                }
-            }
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
-        }
-    }
-
     /**
      * Enrich log entry with geographic information (placeholder)
      */

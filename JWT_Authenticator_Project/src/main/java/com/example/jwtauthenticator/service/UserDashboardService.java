@@ -4,9 +4,7 @@ import com.example.jwtauthenticator.dto.dashboard.UserDashboardCardsDTO;
 import com.example.jwtauthenticator.repository.ApiKeyMonthlyUsageRepository;
 import com.example.jwtauthenticator.repository.ApiKeyRequestLogRepository;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
-import com.example.jwtauthenticator.repository.UserDashboardSummaryRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
-import com.example.jwtauthenticator.entity.UserDashboardSummaryView;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.enums.UserPlan;
 import com.example.jwtauthenticator.enums.RateLimitTier;
@@ -32,7 +30,6 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class UserDashboardService {
 
-    private final UserDashboardSummaryRepository dashboardSummaryRepository;
     private final ApiKeyRequestLogRepository requestLogRepository;
     private final ApiKeyMonthlyUsageRepository monthlyUsageRepository;
     private final ApiKeyRepository apiKeyRepository;
@@ -55,58 +52,9 @@ public class UserDashboardService {
 
         } catch (Exception e) {
             log.warn("Real-time calculation failed for user {}: {}, trying materialized view fallback", userId, e.getMessage());
-            
-            // Fallback to materialized view only if real-time fails
-            try {
-                Optional<UserDashboardSummaryView> summaryOpt = 
-                    dashboardSummaryRepository.findByUserId(userId);
-
-                if (summaryOpt.isPresent()) {
-                    log.info("Using materialized view as fallback for user: {}", userId);
-                    return buildDashboardFromSummary(userId, summaryOpt.get());
-                } else {
-                    log.warn("No materialized view data available for user: {}", userId);
-                    return createEmptyDashboard();
-                }
-
-            } catch (Exception fallbackError) {
-                log.error("Both real-time and materialized view failed for user {}: {}", userId, fallbackError.getMessage(), fallbackError);
-                return createEmptyDashboard();
-            }
+             return createEmptyDashboard();
         }
     }
-
-    /**
-     * Build dashboard from materialized view data (fast path)
-     */
-    private UserDashboardCardsDTO buildDashboardFromSummary(String userId, UserDashboardSummaryView summary) {
-        log.debug("Building dashboard from summary view for user: {}", userId);
-
-        return UserDashboardCardsDTO.builder()
-                .totalApiCalls(buildApiCallsCard(
-                    summary.getTotalCalls30Days(),
-                    summary.getTotalCallsPrevious30Days()
-                ))
-                .activeDomains(buildActiveDomainsCard(
-                    summary.getActiveDomains() != null ? summary.getActiveDomains().intValue() : 0,
-                    summary.getActiveDomainsPrevious() != null ? summary.getActiveDomainsPrevious().intValue() : 0
-                ))
-                .domainsAdded(buildDomainsAddedCard(
-                    summary.getDomainsAddedThisMonth() != null ? summary.getDomainsAddedThisMonth().intValue() : 0,
-                    summary.getDomainsAddedPreviousMonth() != null ? summary.getDomainsAddedPreviousMonth().intValue() : 0
-                ))
-                .remainingQuota(buildRemainingQuotaCard(
-                    userId,
-                    summary.getRemainingQuota(),
-                    summary.getRemainingQuotaPrevious() != null ? summary.getRemainingQuotaPrevious() : 0L,
-                    summary.getTotalCalls30Days()
-                ))
-                .lastUpdated(LocalDateTime.now())
-                .successRate(summary.getSuccessRate())
-                .totalApiKeys(summary.getTotalApiKeys() != null ? summary.getTotalApiKeys().intValue() : 0)
-                .build();
-    }
-
     /**
      * Calculate dashboard in real-time using Java 21 Virtual Threads and modern patterns
      * Optimized for performance with proper query execution monitoring

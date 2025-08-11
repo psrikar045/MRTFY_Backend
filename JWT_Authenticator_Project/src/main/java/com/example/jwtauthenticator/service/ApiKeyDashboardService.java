@@ -2,8 +2,6 @@ package com.example.jwtauthenticator.service;
 
 import com.example.jwtauthenticator.dto.dashboard.SingleApiKeyDashboardDTO;
 import com.example.jwtauthenticator.entity.ApiKey;
-import com.example.jwtauthenticator.repository.ApiKeyDashboardSummaryRepository;
-import com.example.jwtauthenticator.entity.ApiKeyDashboardSummaryView;
 import com.example.jwtauthenticator.repository.ApiKeyRepository;
 import com.example.jwtauthenticator.repository.ApiKeyRequestLogRepository;
 import com.example.jwtauthenticator.repository.ApiKeyMonthlyUsageRepository;
@@ -28,7 +26,6 @@ import java.util.UUID;
 @Slf4j
 public class ApiKeyDashboardService {
 
-    private final ApiKeyDashboardSummaryRepository dashboardSummaryRepository;
     private final ApiKeyRepository apiKeyRepository;
     private final ApiKeyRequestLogRepository requestLogRepository;
     private final ApiKeyMonthlyUsageRepository monthlyUsageRepository;
@@ -56,78 +53,8 @@ public class ApiKeyDashboardService {
 
         } catch (Exception e) {
             log.warn("Real-time calculation failed for API key {}: {}, trying materialized view fallback", apiKeyId, e.getMessage());
-            
-            // Fallback to materialized view only if real-time fails
-            try {
-                Optional<ApiKeyDashboardSummaryView> summaryOpt = 
-                    dashboardSummaryRepository.findByApiKeyIdAndUserFkId(apiKeyId, userId);
-
-                if (summaryOpt.isPresent()) {
-                    log.info("Using materialized view as fallback for API key: {}", apiKeyId);
-                    return buildDashboardFromSummary(summaryOpt.get(), apiKeyOpt.get());
-                } else {
-                    log.error("No materialized view data available for API key: {}", apiKeyId);
-                    return null;
-                }
-
-            } catch (Exception fallbackError) {
-                log.error("Both real-time and materialized view failed for API key {}: {}", apiKeyId, fallbackError.getMessage(), fallbackError);
-                return null;
-            }
+            return null;
         }
-    }
-
-    /**
-     * Build dashboard from materialized view (fast path)
-     */
-    private SingleApiKeyDashboardDTO buildDashboardFromSummary(
-            ApiKeyDashboardSummaryView summary, 
-            ApiKey apiKey) {
-
-        // Calculate today vs yesterday change
-        Double todayVsYesterdayChange = calculatePercentageChange(
-            summary.getRequestsToday(), 
-            summary.getRequestsYesterday()
-        );
-
-        // Build monthly metrics
-        SingleApiKeyDashboardDTO.MonthlyMetricsDTO monthlyMetrics = buildMonthlyMetrics(
-            summary.getTotalCallsCurrentMonth(),
-            summary.getSuccessfulCallsCurrentMonth(),
-            summary.getFailedCallsCurrentMonth(),
-            summary.getQuotaLimit(),
-            summary.getUsagePercentage()
-        );
-
-        // Build performance metrics
-        SingleApiKeyDashboardDTO.PerformanceMetricsDTO performanceMetrics = buildPerformanceMetrics(
-            summary.getAvgResponseTime7Days(),
-            summary.getErrorRate24h(),
-            summary.getLastUsed()
-        );
-
-        // Build rate limit info
-        SingleApiKeyDashboardDTO.RateLimitInfoDTO rateLimitInfo = buildRateLimitInfo(
-            summary.getRateLimitTier(),
-            apiKey.getId()
-        );
-
-        return SingleApiKeyDashboardDTO.builder()
-                .apiKeyId(summary.getApiKeyId())
-                .apiKeyName(summary.getApiKeyName())
-                .registeredDomain(summary.getRegisteredDomain())
-                .requestsToday(summary.getRequestsToday())
-                .requestsYesterday(summary.getRequestsYesterday())
-                .todayVsYesterdayChange(todayVsYesterdayChange)
-                .pendingRequests(summary.getPendingRequests())
-                .usagePercentage(summary.getUsagePercentage())
-                .lastUsed(summary.getLastUsed())
-                .status(summary.getStatus())
-                .monthlyMetrics(monthlyMetrics)
-                .performanceMetrics(performanceMetrics)
-                .rateLimitInfo(rateLimitInfo)
-                .lastUpdated(LocalDateTime.now())
-                .build();
     }
 
     /**

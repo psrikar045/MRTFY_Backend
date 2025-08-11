@@ -295,6 +295,19 @@ public interface ApiKeyRequestLogRepository extends JpaRepository<ApiKeyRequestL
     @Query("SELECT ak.id, ak.name, ak.userFkId FROM ApiKey ak WHERE ak.userFkId = :userFkId")
     List<Object[]> getUserApiKeys(@Param("userFkId") String userFkId);
 
+    // PHASE 2: RivoFetch specific methods
+    
+    /**
+     * Count requests by request path and after timestamp
+     */
+    long countByRequestPathAndRequestTimestampAfter(String requestPath, LocalDateTime timestamp);
+    
+    /**
+     * Count requests by request path, success status, and after timestamp
+     */
+    long countByRequestPathAndSuccessAndRequestTimestampAfter(
+        String requestPath, boolean success, LocalDateTime timestamp);
+
     /**
      * Count pending requests for API key (rate limited + failed requests that might retry)
      */

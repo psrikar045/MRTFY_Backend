@@ -42,6 +42,7 @@ import com.example.jwtauthenticator.service.BrandInfoService;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.PasswordResetService;
 import com.example.jwtauthenticator.service.RateLimiterService;
+import com.example.jwtauthenticator.service.RequestContextExtractorService;
 import com.example.jwtauthenticator.service.TfaService;
 import com.example.jwtauthenticator.util.JwtUtil;
 
@@ -57,6 +58,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 @RestController
@@ -86,6 +88,9 @@ public class AuthController {
     
     @Autowired
     private BrandInfoService brandInfoService;
+    
+    @Autowired
+    private RequestContextExtractorService requestContextExtractor; // PHASE 1 INTEGRATION
 
     @Operation(summary = "Register a new user", 
                description = "Register a new user account with email verification")
@@ -375,7 +380,8 @@ public class AuthController {
     public ResponseEntity<?> publicForward(
             @Parameter(description = "Forward request details", required = true)
             @Valid @RequestBody PublicForwardRequest request,
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         
         long start = System.currentTimeMillis();
         String clientIp = getClientIp(httpRequest);
@@ -392,7 +398,9 @@ public class AuthController {
         }
         
         try {
-            java.util.concurrent.CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
+            // Use the new forwardWithPublicLogging method for comprehensive logging
+            java.util.concurrent.CompletableFuture<ResponseEntity<String>> future = 
+                forwardService.forwardWithPublicLogging(request.url(), httpRequest, httpResponse);
             ResponseEntity<String> extResponse = future.get();
             
             // Log the request (without user ID since this is unauthenticated)
@@ -417,12 +425,12 @@ public class AuthController {
         }
     }
     
+    /**
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
+     */
     private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
     
     private ResponseEntity<Map<String, Object>> buildError(String message, HttpStatus status) {
@@ -1012,34 +1020,11 @@ public class AuthController {
 
     /**
      * Get the real client IP address, considering various proxy headers
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
      */
     private String getClientIpAddress(HttpServletRequest request) {
-        String[] headers = {
-            "X-Forwarded-For",
-            "X-Real-IP", 
-            "Proxy-Client-IP",
-            "WL-Proxy-Client-IP",
-            "HTTP_X_FORWARDED_FOR",
-            "HTTP_X_FORWARDED",
-            "HTTP_X_CLUSTER_CLIENT_IP",
-            "HTTP_CLIENT_IP",
-            "HTTP_FORWARDED_FOR",
-            "HTTP_FORWARDED",
-            "HTTP_VIA",
-            "REMOTE_ADDR"
-        };
-        
-        for (String header : headers) {
-            String ip = request.getHeader(header);
-            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-                // X-Forwarded-For can contain multiple IPs, take the first one
-                if (ip.contains(",")) {
-                    ip = ip.split(",")[0];
-                }
-                return ip.trim();
-            }
-        }
-        
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
 }

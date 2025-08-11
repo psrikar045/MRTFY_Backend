@@ -21,6 +21,7 @@ import com.example.jwtauthenticator.dto.ForwardRequest;
 import com.example.jwtauthenticator.security.ApiKeyDomainGuard;
 import com.example.jwtauthenticator.service.ForwardService;
 import com.example.jwtauthenticator.service.ProfessionalRateLimitService;
+import com.example.jwtauthenticator.service.RequestContextExtractorService;
 import com.example.jwtauthenticator.service.StreamlinedUsageTracker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -33,6 +34,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +69,7 @@ public class SecureAccessController {
     private final ForwardService forwardService;
     private final ProfessionalRateLimitService professionalRateLimitService;
     private final ObjectMapper objectMapper;
+    private final RequestContextExtractorService requestContextExtractor; // PHASE 1 INTEGRATION
 
     
     // ✅ STREAMLINED: Single service for all /rivofetch tracking
@@ -144,7 +147,8 @@ public class SecureAccessController {
     public ResponseEntity<?> secureRivoFetch(
             @Parameter(description = "Forward request details", required = true)
             @Valid @RequestBody ForwardRequest request,
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) { // PHASE 3: Added for logging integration
         
         long startTime = System.currentTimeMillis();
         String requestPath = httpRequest.getRequestURI();
@@ -205,8 +209,9 @@ public class SecureAccessController {
                         ));
             }
 
-            // Step 4: Forward request to internal service
-            CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
+            // Step 4: Forward request to internal service with RivoFetch logging (PHASE 3)
+            CompletableFuture<ResponseEntity<String>> future = forwardService.forwardWithLogging(
+                    request.url(), httpRequest, httpResponse, validationResult.getApiKey());
             ResponseEntity<String> extResponse = future.get();
             
             long duration = System.currentTimeMillis() - startTime;
@@ -502,48 +507,21 @@ public class SecureAccessController {
     
     /**
      * Extract client IP address from request
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
      */
     private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-        
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
     
     /**
      * Extract domain from request headers
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified domain extraction
      */
     private String extractDomainFromRequest(HttpServletRequest request) {
-        // Try Origin header first
-        String origin = request.getHeader("Origin");
-        if (origin != null && !origin.isEmpty()) {
-            try {
-                return new java.net.URL(origin).getHost();
-            } catch (Exception e) {
-                // Fallback to raw origin if URL parsing fails
-                return origin;
-            }
-        }
-        
-        // Try Referer header as fallback
-        String referer = request.getHeader("Referer");
-        if (referer != null && !referer.isEmpty()) {
-            try {
-                return new java.net.URL(referer).getHost();
-            } catch (Exception e) {
-                // Fallback to raw referer if URL parsing fails
-                return referer;
-            }
-        }
-        
-        // Return null if no domain found
-        return null;
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractDomain(request);
     }
 }

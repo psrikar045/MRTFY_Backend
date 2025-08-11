@@ -1,6 +1,7 @@
 package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.dto.ForwardRequest;
+import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.dto.BrandExtractionResponse;
 import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
 import com.example.jwtauthenticator.service.ForwardService;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.HashMap;
@@ -88,7 +90,8 @@ public class ForwardController {
     public ResponseEntity<?> forward(
             @Parameter(description = "Forward request details", required = true)
             @Valid @RequestBody ForwardRequest request, 
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         long start = System.currentTimeMillis();
         
         // Get authentication details (authentication already handled by security filter)
@@ -96,6 +99,7 @@ public class ForwardController {
         String userId;
         String apiKeyId = null;
         String authMethod = "JWT"; // Default to JWT
+        ApiKey apiKey = null; // Store the full API key object
         
         try {
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
@@ -125,7 +129,8 @@ public class ForwardController {
                 }
                 
                 userId = authResult.getUserId();
-                apiKeyId = authResult.getApiKey().getId().toString();
+                apiKey = authResult.getApiKey(); // Store the full API key object
+                apiKeyId = apiKey.getId().toString();
                 authMethod = "API_KEY";
                 
                 // Apply professional rate limiting for API keys
@@ -164,7 +169,15 @@ public class ForwardController {
         }
 
         try {
-            CompletableFuture<ResponseEntity<String>> future = forwardService.forward(request.url());
+            // Use appropriate forward method based on authentication type
+            CompletableFuture<ResponseEntity<String>> future;
+            if (apiKey != null) {
+                // API key authentication - use forwardWithLogging
+                future = forwardService.forwardWithLogging(request.url(), httpRequest, httpResponse, apiKey);
+            } else {
+                // JWT authentication - use forwardWithPublicLogging (no API key)
+                future = forwardService.forwardWithPublicLogging(request.url(), httpRequest, httpResponse);
+            }
             ResponseEntity<String> extResponse = future.get();
             log.info("userId={} | authMethod={} | url={} | status={} | duration={}ms", 
                     userId, authMethod, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);

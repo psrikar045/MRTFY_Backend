@@ -27,6 +27,7 @@ public class EnhancedApiKeyValidationService {
     private final DomainManagementService domainManagementService;
     private final DomainExtractionUtil domainExtractionUtil;
     private final UserRepository userRepository;
+    private final RequestContextExtractorService requestContextExtractor; // PHASE 1 INTEGRATION
     
     // Optional services for logging and stats
     private final UsageStatsService usageStatsService;
@@ -38,6 +39,7 @@ public class EnhancedApiKeyValidationService {
             DomainManagementService domainManagementService,
             DomainExtractionUtil domainExtractionUtil,
             UserRepository userRepository,
+            RequestContextExtractorService requestContextExtractor, // PHASE 1 INTEGRATION
             @org.springframework.beans.factory.annotation.Autowired(required = false) UsageStatsService usageStatsService,
             @org.springframework.beans.factory.annotation.Autowired(required = false) RequestLoggingService requestLoggingService) {
         this.monthlyUsageService = monthlyUsageService;
@@ -45,6 +47,7 @@ public class EnhancedApiKeyValidationService {
         this.domainManagementService = domainManagementService;
         this.domainExtractionUtil = domainExtractionUtil;
         this.userRepository = userRepository;
+        this.requestContextExtractor = requestContextExtractor; // PHASE 1 INTEGRATION
         this.usageStatsService = usageStatsService;
         this.requestLoggingService = requestLoggingService;
     }
@@ -373,19 +376,12 @@ public class EnhancedApiKeyValidationService {
     
     /**
      * Extract client IP from request
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
      */
     private String extractClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.trim().isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.trim().isEmpty()) {
-            return xRealIp.trim();
-        }
-        
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
     
     /**

@@ -1,6 +1,7 @@
 package com.example.jwtauthenticator.security;
 
 import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
+import com.example.jwtauthenticator.service.RequestContextExtractorService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,14 +34,17 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     private final JwtUserDetailsService jwtUserDetailsService;
     private final JwtUtil jwtUtil;
+    private final RequestContextExtractorService requestContextExtractor; // PHASE 1 INTEGRATION
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Autowired
     private ApiKeyAuthenticationService apiKeyAuthenticationService;
 
-    public JwtRequestFilter(JwtUtil jwtUtil, JwtUserDetailsService jwtUserDetailsService) {
+    public JwtRequestFilter(JwtUtil jwtUtil, JwtUserDetailsService jwtUserDetailsService, 
+                           RequestContextExtractorService requestContextExtractor) {
         this.jwtUtil = jwtUtil;
         this.jwtUserDetailsService = jwtUserDetailsService;
+        this.requestContextExtractor = requestContextExtractor; // PHASE 1 INTEGRATION
     }
 
     @Override
@@ -310,19 +314,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     
     /**
      * Extract client IP address from request
+     * 
+     * PHASE 1 INTEGRATION: Now uses RequestContextExtractorService for unified IP extraction
      */
     private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-        
-        return request.getRemoteAddr();
+        // PHASE 1 INTEGRATION: Use unified context extractor instead of manual logic
+        return requestContextExtractor.extractClientIp(request);
     }
     
     /**

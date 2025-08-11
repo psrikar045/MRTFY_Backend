@@ -404,45 +404,7 @@ public class DashboardController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
         }
     }
-    
-    /**
-     * 🔄 Manual Materialized View Refresh
-     * Triggers immediate refresh of dashboard materialized views
-     */
-    @PostMapping("/refresh-views")
-    @Operation(
-        summary = "Refresh Dashboard Views",
-        description = "Manually triggers refresh of materialized views for immediate dashboard updates",
-        security = { @SecurityRequirement(name = "Bearer Authentication") }
-    )
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Views refreshed successfully"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "500", description = "Refresh failed")
-    })
-    public ResponseEntity<?> refreshDashboardViews(@AuthenticationPrincipal UserDetails userDetails) {
-        try {
-            String userId = getCurrentUserId(userDetails);
-            
-            log.info("🔄 Manual dashboard view refresh requested by user: {}", userId);
-            
-            Map<String, Object> result = healthCheckService.refreshMaterializedViews();
-            result.put("timestamp", java.time.Instant.now().toString());
-            result.put("requestedBy", userId);
-            
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            log.error("Manual dashboard view refresh failed: {}", e.getMessage(), e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("status", "ERROR");
-            errorResponse.put("message", "Failed to refresh dashboard views: " + e.getMessage());
-            errorResponse.put("timestamp", java.time.Instant.now().toString());
-            
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-        }
-    }
-    
+
     /**
      * 🔍 Quick Data Diagnostic
      * Simple endpoint to check data flow without complex dependencies

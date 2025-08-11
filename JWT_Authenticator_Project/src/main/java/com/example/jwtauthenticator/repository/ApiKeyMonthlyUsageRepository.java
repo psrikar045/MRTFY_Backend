@@ -48,6 +48,19 @@ public interface ApiKeyMonthlyUsageRepository extends JpaRepository<ApiKeyMonthl
     List<ApiKeyMonthlyUsage> findUsageRecordsNeedingReset(@Param("resetDate") LocalDate resetDate);
     
     /**
+     * Find all usage records that need reset for the given reset date
+     * Used by scheduled reset job - includes records with null reset dates
+     */
+    @Query("SELECT u FROM ApiKeyMonthlyUsage u WHERE u.lastResetDate < :resetDate OR u.lastResetDate IS NULL")
+    List<ApiKeyMonthlyUsage> findAllNeedingReset(@Param("resetDate") LocalDate resetDate);
+    
+    /**
+     * Count records needing reset (for monitoring and capacity planning)
+     */
+    @Query("SELECT COUNT(u) FROM ApiKeyMonthlyUsage u WHERE u.lastResetDate < :resetDate OR u.lastResetDate IS NULL")
+    long countRecordsNeedingReset(@Param("resetDate") LocalDate resetDate);
+    
+    /**
      * Get total API calls for user in current month
      */
     @Query("SELECT COALESCE(SUM(u.totalCalls), 0) FROM ApiKeyMonthlyUsage u WHERE u.userId = :userId AND u.monthYear = :monthYear")

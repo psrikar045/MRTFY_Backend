@@ -13,7 +13,6 @@ import java.util.Map;
  * 
  * Provides comprehensive health checks for dashboard functionality including:
  * - Database connectivity
- * - Materialized view status
  * - Connection pool health
  * - Data consistency checks
  */
@@ -23,7 +22,6 @@ import java.util.Map;
 public class DashboardHealthCheckService {
     
     private final JdbcTemplate jdbcTemplate;
-    private final MaterializedViewRefreshService viewRefreshService;
     
     /**
      * 🔍 Comprehensive dashboard health check
@@ -35,13 +33,10 @@ public class DashboardHealthCheckService {
             // 1. Database connectivity check
             healthStatus.put("database", checkDatabaseConnectivity());
             
-            // 2. Materialized views check
-            healthStatus.put("materializedViews", checkMaterializedViews());
-            
-            // 3. Data consistency check
+            // 2. Data consistency check
             healthStatus.put("dataConsistency", checkDataConsistency());
             
-            // 4. Overall status
+            // 3. Overall status
             boolean allHealthy = healthStatus.values().stream()
                 .allMatch(status -> status instanceof Map && "HEALTHY".equals(((Map<?, ?>) status).get("status")));
             
@@ -81,53 +76,6 @@ public class DashboardHealthCheckService {
     }
     
     /**
-     * 📊 Check materialized views status
-     */
-    private Map<String, Object> checkMaterializedViews() {
-        try {
-            // Check if materialized views exist and have data
-            Long userViewCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM user_dashboard_summary", Long.class);
-            
-            Long apiKeyViewCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM api_key_dashboard_summary", Long.class);
-            
-            // Get last update times
-            String userViewLastUpdate = null;
-            String apiKeyViewLastUpdate = null;
-            
-            try {
-                userViewLastUpdate = jdbcTemplate.queryForObject(
-                    "SELECT MAX(last_updated)::text FROM user_dashboard_summary", String.class);
-            } catch (Exception e) {
-                log.debug("Could not get user view last update: {}", e.getMessage());
-            }
-            
-            try {
-                apiKeyViewLastUpdate = jdbcTemplate.queryForObject(
-                    "SELECT MAX(last_updated)::text FROM api_key_dashboard_summary", String.class);
-            } catch (Exception e) {
-                log.debug("Could not get API key view last update: {}", e.getMessage());
-            }
-            
-            return Map.of(
-                "status", "HEALTHY",
-                "message", "Materialized views are accessible",
-                "userViewRecords", userViewCount != null ? userViewCount : 0,
-                "apiKeyViewRecords", apiKeyViewCount != null ? apiKeyViewCount : 0,
-                "userViewLastUpdate", userViewLastUpdate != null ? userViewLastUpdate : "Unknown",
-                "apiKeyViewLastUpdate", apiKeyViewLastUpdate != null ? apiKeyViewLastUpdate : "Unknown"
-            );
-            
-        } catch (Exception e) {
-            return Map.of(
-                "status", "ERROR",
-                "message", "Materialized views check failed: " + e.getMessage()
-            );
-        }
-    }
-    
-    /**
      * 🔍 Check data consistency between tables
      */
     private Map<String, Object> checkDataConsistency() {
@@ -161,24 +109,6 @@ public class DashboardHealthCheckService {
             return Map.of(
                 "status", "ERROR",
                 "message", "Data consistency check failed: " + e.getMessage()
-            );
-        }
-    }
-    
-    /**
-     * 🔄 Trigger manual refresh of materialized views
-     */
-    public Map<String, Object> refreshMaterializedViews() {
-        try {
-            viewRefreshService.refreshDashboardViewsSync();
-            return Map.of(
-                "status", "SUCCESS",
-                "message", "Materialized views refreshed successfully"
-            );
-        } catch (Exception e) {
-            return Map.of(
-                "status", "ERROR",
-                "message", "Failed to refresh materialized views: " + e.getMessage()
             );
         }
     }
