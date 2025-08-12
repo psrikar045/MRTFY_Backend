@@ -8,7 +8,6 @@ import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.enums.UserPlan;
 import com.example.jwtauthenticator.enums.RateLimitTier;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * Service for User Dashboard Cards
@@ -26,7 +26,6 @@ import java.util.concurrent.Executors;
  * Uses rolling 30-day averages for percentage calculations
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class UserDashboardService {
 
@@ -34,6 +33,19 @@ public class UserDashboardService {
     private final ApiKeyMonthlyUsageRepository monthlyUsageRepository;
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository;
+    private final Executor transactionalAsyncExecutor;
+
+    public UserDashboardService(ApiKeyRequestLogRepository requestLogRepository,
+                                ApiKeyMonthlyUsageRepository monthlyUsageRepository,
+                                ApiKeyRepository apiKeyRepository,
+                                UserRepository userRepository,
+                                @Qualifier("transactionalAsyncExecutor") Executor transactionalAsyncExecutor) {
+        this.requestLogRepository = requestLogRepository;
+        this.monthlyUsageRepository = monthlyUsageRepository;
+        this.apiKeyRepository = apiKeyRepository;
+        this.userRepository = userRepository;
+        this.transactionalAsyncExecutor = transactionalAsyncExecutor;
+    }
 
     /**
      * Get user dashboard cards with SMART CACHING
@@ -69,108 +81,104 @@ public class UserDashboardService {
         var currentMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
         var previousMonth = LocalDate.now().minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
         
-        // Use Virtual Threads for parallel computation (Java 21 feature)
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        // Use a bounded shared executor to control DB concurrency and reduce pool contention
+        // Parallel computation using CompletableFuture with bounded executor
+        var currentCallsTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, thirtyDaysAgo, now), transactionalAsyncExecutor);
             
-            // Parallel computation using CompletableFuture with Virtual Threads
-            // Use request logs for ACCURATE data (monthly usage was inflated by rate limit checks)
-            var currentCallsTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, thirtyDaysAgo, now), executor);
-                
-            var previousCallsTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, sixtyDaysAgo, thirtyDaysAgo), executor);
-                
-            var activeDomainsTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countDistinctDomainsByUserAndTimeRange(userId, thirtyDaysAgo, now), executor);
-                
-            var previousActiveDomainsTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countDistinctDomainsByUserAndTimeRange(userId, sixtyDaysAgo, thirtyDaysAgo), executor);
-                
-            var domainsAddedThisMonthTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countNewDomainsForUserInMonth(userId, currentMonth), executor);
-                
-            var domainsAddedPreviousMonthTask = CompletableFuture.supplyAsync(() -> 
-                requestLogRepository.countNewDomainsForUserInMonth(userId, previousMonth), executor);
-                
-            var remainingQuotaTask = CompletableFuture.supplyAsync(() -> 
-                calculateRemainingQuotaForUser(userId, currentMonth), executor);
-                
-            var previousRemainingQuotaTask = CompletableFuture.supplyAsync(() -> 
-                calculateRemainingQuotaForUser(userId, previousMonth), executor);
-                
-            var successRateTask = CompletableFuture.supplyAsync(() -> 
-                calculateSuccessRateForUser(userId, thirtyDaysAgo, now), executor);
-                
-            var totalApiKeysTask = CompletableFuture.supplyAsync(() -> 
-                apiKeyRepository.countByUserFkId(userId), executor);
+        var previousCallsTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countByUserFkIdAndRequestTimestampBetween(userId, sixtyDaysAgo, thirtyDaysAgo), transactionalAsyncExecutor);
             
-            // Wait for all tasks to complete and build dashboard
-            var currentCalls = currentCallsTask.join();
-            var previousCalls = previousCallsTask.join();
+        var activeDomainsTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countDistinctDomainsByUserAndTimeRange(userId, thirtyDaysAgo, now), transactionalAsyncExecutor);
             
-            // Handle null values from database
-            currentCalls = currentCalls != null ? currentCalls : 0L;
-            previousCalls = previousCalls != null ? previousCalls : 0L;
-            var activeDomains = activeDomainsTask.join();
-            var previousActiveDomains = previousActiveDomainsTask.join();
-            var domainsAddedThisMonth = domainsAddedThisMonthTask.join();
-            var domainsAddedPreviousMonth = domainsAddedPreviousMonthTask.join();
-            var remainingQuota = remainingQuotaTask.join();
-            var previousRemainingQuota = previousRemainingQuotaTask.join();
-            var successRate = successRateTask.join();
-            var totalApiKeys = totalApiKeysTask.join();
+        var previousActiveDomainsTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countDistinctDomainsByUserAndTimeRange(userId, sixtyDaysAgo, thirtyDaysAgo), transactionalAsyncExecutor);
             
-            log.info("📊 FIXED User Dashboard Data Sources for user {}: currentCalls={} (from request_logs - ACCURATE), previousCalls={} (from request_logs)", 
-                     userId, currentCalls, previousCalls);
-            log.debug("Dashboard calculation results for user {}: currentCalls={}, previousCalls={}, activeDomains={}, previousActiveDomains={}, domainsAddedThisMonth={}, domainsAddedPreviousMonth={}, remainingQuota={}, previousRemainingQuota={}, successRate={}, totalApiKeys={}", 
-                     userId, currentCalls, previousCalls, activeDomains, previousActiveDomains, domainsAddedThisMonth, domainsAddedPreviousMonth, remainingQuota, previousRemainingQuota, successRate, totalApiKeys);
+        var domainsAddedThisMonthTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countNewDomainsForUserInMonth(userId, currentMonth), transactionalAsyncExecutor);
             
-            // Debug: Verify domain data correctness and user's API keys
-            if (log.isDebugEnabled()) {
-                try {
-                    // First, verify user's API keys
-                    var userApiKeys = requestLogRepository.getUserApiKeys(userId);
-                    log.debug("Debug - User {} has {} API keys:", userId, userApiKeys.size());
-                    userApiKeys.forEach(row -> 
-                        log.debug("  ApiKey ID: {}, Name: {}, UserFkId: {}", row[0], row[1], row[2]));
-                    
-                    // Then check domain data
-                    var debugDomains = requestLogRepository.getDebugDomainDataForUser(userId);
-                    var distinctDomains = requestLogRepository.getDistinctDomainsWithStatsForUser(userId);
-                    
-                    log.debug("Debug - Recent domain requests for user {}: {}", userId, debugDomains.size());
-                    debugDomains.stream().limit(5).forEach(row -> 
-                        log.debug("  Domain: {}, ApiKey: {}, UserFkId: {}, ApiKeyName: {}, Timestamp: {}", 
-                                 row[0], row[1], row[2], row[3], row[4]));
-                    
-                    log.debug("Debug - Distinct domains for user {}: {}", userId, distinctDomains.size());
-                    distinctDomains.forEach(row -> 
-                        log.debug("  Domain: {}, FirstSeen: {}, TotalRequests: {}", 
-                                 row[0], row[1], row[2]));
-                                 
-                } catch (Exception e) {
-                    log.warn("Error getting debug domain info for user {}: {}", userId, e.getMessage());
-                }
+        var domainsAddedPreviousMonthTask = CompletableFuture.supplyAsync(() -> 
+            requestLogRepository.countNewDomainsForUserInMonth(userId, previousMonth), transactionalAsyncExecutor);
+            
+        var remainingQuotaTask = CompletableFuture.supplyAsync(() -> 
+            calculateRemainingQuotaForUser(userId, currentMonth), transactionalAsyncExecutor);
+            
+        var previousRemainingQuotaTask = CompletableFuture.supplyAsync(() -> 
+            calculateRemainingQuotaForUser(userId, previousMonth), transactionalAsyncExecutor);
+            
+        var successRateTask = CompletableFuture.supplyAsync(() -> 
+            calculateSuccessRateForUser(userId, thirtyDaysAgo, now), transactionalAsyncExecutor);
+            
+        var totalApiKeysTask = CompletableFuture.supplyAsync(() -> 
+            apiKeyRepository.countByUserFkId(userId), transactionalAsyncExecutor);
+        
+        // Wait for all tasks to complete and build dashboard
+        var currentCalls = currentCallsTask.join();
+        var previousCalls = previousCallsTask.join();
+        
+        // Handle null values from database
+        currentCalls = currentCalls != null ? currentCalls : 0L;
+        previousCalls = previousCalls != null ? previousCalls : 0L;
+        var activeDomains = activeDomainsTask.join();
+        var previousActiveDomains = previousActiveDomainsTask.join();
+        var domainsAddedThisMonth = domainsAddedThisMonthTask.join();
+        var domainsAddedPreviousMonth = domainsAddedPreviousMonthTask.join();
+        var remainingQuota = remainingQuotaTask.join();
+        var previousRemainingQuota = previousRemainingQuotaTask.join();
+        var successRate = successRateTask.join();
+        var totalApiKeys = totalApiKeysTask.join();
+        
+        log.info("📊 FIXED User Dashboard Data Sources for user {}: currentCalls={} (from request_logs - ACCURATE), previousCalls={} (from request_logs)", 
+                 userId, currentCalls, previousCalls);
+        log.debug("Dashboard calculation results for user {}: currentCalls={}, previousCalls={}, activeDomains={}, previousActiveDomains={}, domainsAddedThisMonth={}, domainsAddedPreviousMonth={}, remainingQuota={}, previousRemainingQuota={}, successRate={}, totalApiKeys={}", 
+                 userId, currentCalls, previousCalls, activeDomains, previousActiveDomains, domainsAddedThisMonth, domainsAddedPreviousMonth, remainingQuota, previousRemainingQuota, successRate, totalApiKeys);
+        
+        // Debug: Verify domain data correctness and user's API keys
+        if (log.isDebugEnabled()) {
+            try {
+                // First, verify user's API keys
+                var userApiKeys = requestLogRepository.getUserApiKeys(userId);
+                log.debug("Debug - User {} has {} API keys:", userId, userApiKeys.size());
+                userApiKeys.forEach(row -> 
+                    log.debug("  ApiKey ID: {}, Name: {}, UserFkId: {}", row[0], row[1], row[2]));
+                
+                // Then check domain data
+                var debugDomains = requestLogRepository.getDebugDomainDataForUser(userId);
+                var distinctDomains = requestLogRepository.getDistinctDomainsWithStatsForUser(userId);
+                
+                log.debug("Debug - Recent domain requests for user {}: {}", userId, debugDomains.size());
+                debugDomains.stream().limit(5).forEach(row -> 
+                    log.debug("  Domain: {}, ApiKey: {}, UserFkId: {}, ApiKeyName: {}, Timestamp: {}", 
+                             row[0], row[1], row[2], row[3], row[4]));
+                
+                log.debug("Debug - Distinct domains for user {}: {}", userId, distinctDomains.size());
+                distinctDomains.forEach(row -> 
+                    log.debug("  Domain: {}, FirstSeen: {}, TotalRequests: {}", 
+                             row[0], row[1], row[2]));
+                             
+            } catch (Exception e) {
+                log.warn("Error getting debug domain info for user {}: {}", userId, e.getMessage());
             }
-            
-            long executionTime = System.currentTimeMillis() - startTime;
-            log.info("📊 Dashboard calculation completed for user {} in {}ms", userId, executionTime);
-            log.info("📈 Final calculated values: currentCalls={}, activeDomains={}, remainingQuota={}, successRate={}, totalApiKeys={}", 
-                     currentCalls, activeDomains, remainingQuota, successRate, totalApiKeys);
-            
-            UserDashboardCardsDTO result = UserDashboardCardsDTO.builder()
-                    .totalApiCalls(buildApiCallsCard(currentCalls, previousCalls))
-                    .activeDomains(buildActiveDomainsCard(activeDomains, previousActiveDomains))
-                    .domainsAdded(buildDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
-                    .remainingQuota(buildRemainingQuotaCard(userId, remainingQuota, previousRemainingQuota, currentCalls))
-                    .lastUpdated(LocalDateTime.now())
-                    .successRate(successRate)
-                    .totalApiKeys(totalApiKeys)
-                    .build();
-            
-            log.info("🎯 Returning dashboard result for user: {}", userId);
-            return result;
         }
+        
+        long executionTime = System.currentTimeMillis() - startTime;
+        log.info("📊 Dashboard calculation completed for user {} in {}ms", userId, executionTime);
+        log.info("📈 Final calculated values: currentCalls={}, activeDomains={}, remainingQuota={}, successRate={}, totalApiKeys={}", 
+                 currentCalls, activeDomains, remainingQuota, successRate, totalApiKeys);
+        
+        UserDashboardCardsDTO result = UserDashboardCardsDTO.builder()
+                .totalApiCalls(buildApiCallsCard(currentCalls, previousCalls))
+                .activeDomains(buildActiveDomainsCard(activeDomains, previousActiveDomains))
+                .domainsAdded(buildDomainsAddedCard(domainsAddedThisMonth, domainsAddedPreviousMonth))
+                .remainingQuota(buildRemainingQuotaCard(userId, remainingQuota, previousRemainingQuota, currentCalls))
+                .lastUpdated(LocalDateTime.now())
+                .successRate(successRate)
+                .totalApiKeys(totalApiKeys)
+                .build();
+        
+        log.info("🎯 Returning dashboard result for user: {}", userId);
+        return result;
     }
 
     /**

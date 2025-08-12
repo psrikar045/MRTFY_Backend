@@ -80,6 +80,56 @@ public class BrandOptimizedService {
         return brandPage;
     }
     
-
+    /**
+     * Search brands by name and website with optimized relationship loading
+     */
+    public List<Brand> searchBrandsInNameAndWebsiteWithRelations(String searchTerm) {
+        long startTime = System.currentTimeMillis();
+        
+        List<Brand> brands = brandRepository.searchBrandsInNameAndWebsite(searchTerm);
+        
+        if (!brands.isEmpty()) {
+            // Force initialization of all collections within the transaction
+            brands.forEach(brand -> {
+                brand.getAssets().size();
+                brand.getColors().size();
+                brand.getFonts().size();
+                brand.getSocialLinks().size();
+                brand.getImages().size();
+            });
+        }
+        
+        long endTime = System.currentTimeMillis();
+        log.info("Searched {} brands (name/website) with all relationships in {}ms", 
+                brands.size(), endTime - startTime);
+        
+        return brands;
+    }
+    
+    /**
+     * Paginated search brands by name and website with optimized relationship loading
+     */
+    public Page<Brand> searchBrandsInNameAndWebsiteWithRelations(String searchTerm, Pageable pageable) {
+        long startTime = System.currentTimeMillis();
+        
+        Page<Brand> brandPage = brandRepository.searchBrandsInNameAndWebsite(searchTerm, pageable);
+        List<Brand> brands = brandPage.getContent();
+        
+        if (!brands.isEmpty()) {
+            brands.forEach(brand -> {
+                brand.getAssets().size();
+                brand.getColors().size();
+                brand.getFonts().size();
+                brand.getSocialLinks().size();
+                brand.getImages().size();
+            });
+        }
+        
+        long endTime = System.currentTimeMillis();
+        log.info("Searched {} brands (page {}, name/website) with all relationships in {}ms", 
+                brands.size(), pageable.getPageNumber(), endTime - startTime);
+        
+        return brandPage;
+    }
 
 }

@@ -80,4 +80,20 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     @Query(value = "SELECT DISTINCT b FROM Brand b ORDER BY b.createdAt DESC",
            countQuery = "SELECT COUNT(DISTINCT b) FROM Brand b")
     Page<Brand> findAllWithRelations(Pageable pageable);
+    
+    // Search methods for name and website only (optimized for /all endpoint)
+    @Query("SELECT DISTINCT b FROM Brand b WHERE " +
+           "LOWER(b.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(b.website) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "ORDER BY b.createdAt DESC")
+    List<Brand> searchBrandsInNameAndWebsite(@Param("searchTerm") String searchTerm);
+    
+    @Query(value = "SELECT DISTINCT b FROM Brand b WHERE " +
+           "LOWER(b.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(b.website) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "ORDER BY b.createdAt DESC",
+           countQuery = "SELECT COUNT(DISTINCT b) FROM Brand b WHERE " +
+           "LOWER(b.name) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
+           "LOWER(b.website) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
+    Page<Brand> searchBrandsInNameAndWebsite(@Param("searchTerm") String searchTerm, Pageable pageable);
 }

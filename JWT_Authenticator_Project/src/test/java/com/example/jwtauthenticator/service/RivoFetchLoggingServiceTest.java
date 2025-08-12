@@ -81,7 +81,7 @@ public class RivoFetchLoggingServiceTest {
         HttpServletResponse mockResponse = mock(HttpServletResponse.class);
         
         when(mockRequest.getMethod()).thenReturn("GET");
-        when(mockRequest.getRequestURI()).thenReturn("/test");
+        when(mockRequest.getRequestURI()).thenReturn("/api/secure/rivofetch");
         when(mockRequest.getHeader("User-Agent")).thenReturn("Test-Agent");
         when(mockRequest.getRemoteAddr()).thenReturn("127.0.0.1");
         when(mockResponse.getStatus()).thenReturn(200);

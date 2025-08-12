@@ -328,7 +328,7 @@ public class EnhancedApiKeyService {
         return apiKeyRepository.findByIdAndUserFkId(keyId, userId).map(existingKey -> {
             // Store existing key details
             String name = existingKey.getName();
-            String description = existingKey.getDescription();
+            // String description = existingKey.getDescription();
             String prefix = existingKey.getPrefix();
             
             // Create new key value, hash, and encryption
@@ -859,13 +859,6 @@ public class EnhancedApiKeyService {
                 .canCreateApiKey(user.canCreateApiKey())
                 .canClaimDomain(user.canClaimDomain())
                 .build();
-    }
-    
-    /**
-     * Generate a secure API key
-     */
-    private String generateApiKey() {
-        return generateApiKey(null);
     }
     
     /**

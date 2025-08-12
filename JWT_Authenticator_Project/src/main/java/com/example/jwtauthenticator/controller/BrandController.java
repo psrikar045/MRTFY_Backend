@@ -198,6 +198,94 @@ public class BrandController {
         return ResponseEntity.ok(stats);
     }
     
+    /**
+     * Endpoint: Get All Brands with Optional Search
+     * Path: /brands/all
+     * Method: GET
+     */
+    @GetMapping("/all")
+    @Operation(
+        summary = "Get all brands with optional search",
+        description = "Retrieve a list of all brands with optional search in name and website. For large datasets, consider using pagination."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved brands"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<?> getAllBrands(
+            @Parameter(description = "Search term for name and website", example = "google")
+            @RequestParam(required = false) String search,
+            @Parameter(description = "Enable pagination for large datasets")
+            @RequestParam(defaultValue = "false") boolean paginated,
+            @Parameter(description = "Page number (0-based)")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size (max 100)")
+            @RequestParam(defaultValue = "50") int size) {
+        
+        long startTime = System.currentTimeMillis();
+        try {
+            boolean hasSearchTerm = search != null && !search.trim().isEmpty();
+            
+            if (paginated) {
+                Pageable pageable = PageRequest.of(page, Math.min(size, 100)); // Max 100 per page
+                Page<Brand> brandPage;
+                
+                if (hasSearchTerm) {
+                    brandPage = brandOptimizedService.searchBrandsInNameAndWebsiteWithRelations(search.trim(), pageable);
+                } else {
+                    brandPage = brandOptimizedService.findAllBrandsWithRelations(pageable);
+                }
+                
+                List<BrandDataResponse> response = brandPage.getContent().stream()
+                    .map(brandDataService::convertToResponse)
+                    .collect(Collectors.toList());
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("data", response);
+                result.put("totalElements", brandPage.getTotalElements());
+                result.put("totalPages", brandPage.getTotalPages());
+                result.put("currentPage", brandPage.getNumber());
+                result.put("pageSize", brandPage.getSize());
+                result.put("hasNext", brandPage.hasNext());
+                result.put("hasPrevious", brandPage.hasPrevious());
+                result.put("searchTerm", hasSearchTerm ? search.trim() : null);
+                result.put("executionTimeMs", System.currentTimeMillis() - startTime);
+                
+                log.info("Retrieved {} brands (paginated{}) in {} ms", 
+                    response.size(), hasSearchTerm ? " with search: " + search.trim() : "", 
+                    System.currentTimeMillis() - startTime);
+                return ResponseEntity.ok(result);
+            } else {
+                List<Brand> brands;
+                
+                if (hasSearchTerm) {
+                    brands = brandOptimizedService.searchBrandsInNameAndWebsiteWithRelations(search.trim());
+                } else {
+                    brands = brandOptimizedService.findAllBrandsWithRelations();
+                }
+                
+                List<BrandDataResponse> response = brands.stream()
+                    .map(brandDataService::convertToResponse)
+                    .collect(Collectors.toList());
+                
+                Map<String, Object> result = new HashMap<>();
+                result.put("data", response);
+                result.put("count", response.size());
+                result.put("searchTerm", hasSearchTerm ? search.trim() : null);
+                result.put("executionTimeMs", System.currentTimeMillis() - startTime);
+                
+                log.info("Retrieved {} brands (all{}) in {} ms", 
+                    response.size(), hasSearchTerm ? " with search: " + search.trim() : "", 
+                    System.currentTimeMillis() - startTime);
+                return ResponseEntity.ok(result);
+            }
+        } catch (Exception e) {
+            log.error("Error retrieving all brands{}", search != null ? " with search: " + search : "", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Error retrieving brands: " + e.getMessage()));
+        }
+    }
+    
     @GetMapping("/assets/{assetId}")
     @Operation(
         summary = "Serve brand asset file",
@@ -447,10 +535,10 @@ public class BrandController {
     
     /**
      * Endpoint 1: Get All Brands
-     * Path: /brands/all
+     * Path: /brands/all-brands
      * Method: GET
      */
-    @GetMapping("/all")
+    @GetMapping("/all-brands")
     @Operation(
         summary = "Get all brands",
         description = "Retrieve a list of all brands from the brands table. For large datasets, consider using the paginated version."
