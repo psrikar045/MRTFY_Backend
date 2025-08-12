@@ -125,18 +125,24 @@ public class ForwardService {
                 BrandExtractionResponse brandResponse = convertBrandToExtractionResponse(existingBrand.get());
                 String jsonResponse = objectMapper.writeValueAsString(brandResponse);
                 
-                // Log successful cached response (DATABASE_HIT)
-                rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
-                        request, response, apiKey, startTime, jsonResponse, "DATABASE_HIT");
+                // Log successful cached response (DATABASE_HIT) - SYNCHRONOUS to ensure logging
+                boolean logged = rivoFetchLoggingService.logSuccessfulRivoFetchSync(
+                        request, response, apiKey, startTime, jsonResponse, "DATABASE_HIT", url);
+                if (!logged) {
+                    log.warn("⚠️ Failed to log DATABASE_HIT for URL: {}", url);
+                }
                 
                 return CompletableFuture.completedFuture(ResponseEntity.ok(jsonResponse));
             } catch (Exception e) {
                 log.error("Error converting brand data to response for URL: {}", url, e);
                 
-                // Log the error
-                rivoFetchLoggingService.logFailedRivoFetchAsync(
+                // Log the error - SYNCHRONOUS to ensure logging
+                boolean logged = rivoFetchLoggingService.logFailedRivoFetchSync(
                         request, apiKey, startTime, 
-                        "Brand data conversion error: " + e.getMessage(), 500);
+                        "Brand data conversion error: " + e.getMessage(), 500, url);
+                if (!logged) {
+                    log.warn("⚠️ Failed to log brand conversion error for URL: {}", url);
+                }
                 
                 // Fall through to external API call on error
             }
@@ -147,9 +153,12 @@ public class ForwardService {
         if (cached != null) {
             log.info("Found in-memory cached data for URL: {}", url);
             
-            // Log successful cached response (MEMORY_HIT)
-            rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
-                    request, response, apiKey, startTime, cached, "MEMORY_HIT");
+            // Log successful cached response (MEMORY_HIT) - SYNCHRONOUS to ensure logging
+            boolean logged = rivoFetchLoggingService.logSuccessfulRivoFetchSync(
+                    request, response, apiKey, startTime, cached, "MEMORY_HIT", url);
+            if (!logged) {
+                log.warn("⚠️ Failed to log MEMORY_HIT for URL: {}", url);
+            }
             
             // Even for cached responses, trigger brand extraction if enabled
             if (brandExtractionEnabled) {
@@ -169,10 +178,13 @@ public class ForwardService {
                 .doOnError(e -> {
                     log.error("Forwarding error for URL: {}", url, e);
                     
-                    // Log the error asynchronously
-                    rivoFetchLoggingService.logFailedRivoFetchAsync(
+                    // Log the error - SYNCHRONOUS to ensure logging
+                    boolean logged = rivoFetchLoggingService.logFailedRivoFetchSync(
                             request, apiKey, startTime, 
-                            "External API error: " + e.getMessage(), 500);
+                            "External API error: " + e.getMessage(), 500, url);
+                    if (!logged) {
+                        log.warn("⚠️ Failed to log external API error for URL: {}", url);
+                    }
                 })
                 .toFuture()
                 .thenApply(forwardResponse -> {
@@ -180,30 +192,39 @@ public class ForwardService {
                         // Cache successful response
                         forwardCache.put(url, forwardResponse.getBody());
                         
-                        // Log successful response (MISS - external API call)
-                        rivoFetchLoggingService.logSuccessfulRivoFetchAsync(
-                                request, response, apiKey, startTime, forwardResponse.getBody(), "MISS");
+                        // Log successful response (MISS - external API call) - SYNCHRONOUS to ensure logging
+                        boolean logged = rivoFetchLoggingService.logSuccessfulRivoFetchSync(
+                                request, response, apiKey, startTime, forwardResponse.getBody(), "MISS", url);
+                        if (!logged) {
+                            log.warn("⚠️ Failed to log MISS for URL: {}", url);
+                        }
                         
                         // Trigger brand data extraction for successful responses
                         if (brandExtractionEnabled) {
                             triggerBrandExtraction(url, forwardResponse.getBody());
                         }
                     } else {
-                        // Log failed response
-                        rivoFetchLoggingService.logFailedRivoFetchAsync(
+                        // Log failed response - SYNCHRONOUS to ensure logging
+                        boolean logged = rivoFetchLoggingService.logFailedRivoFetchSync(
                                 request, apiKey, startTime, 
                                 "External API returned status: " + forwardResponse.getStatusCode(),
-                                forwardResponse.getStatusCode().value());
+                                forwardResponse.getStatusCode().value(), url);
+                        if (!logged) {
+                            log.warn("⚠️ Failed to log failed response for URL: {}", url);
+                        }
                     }
                     return forwardResponse;
                 })
                 .exceptionally(throwable -> {
                     log.error("Exception in forward operation for URL: {}", url, throwable);
                     
-                    // Log the exception
-                    rivoFetchLoggingService.logFailedRivoFetchAsync(
+                    // Log the exception - SYNCHRONOUS to ensure logging
+                    boolean logged = rivoFetchLoggingService.logFailedRivoFetchSync(
                             request, apiKey, startTime, 
-                            "Forward operation exception: " + throwable.getMessage(), 500);
+                            "Forward operation exception: " + throwable.getMessage(), 500, url);
+                    if (!logged) {
+                        log.warn("⚠️ Failed to log exception for URL: {}", url);
+                    }
                     
                     // Return error response
                     return ResponseEntity.status(500).body("Internal server error");
@@ -230,7 +251,7 @@ public class ForwardService {
                 
                 // Log successful cached response (DATABASE_HIT)
                 rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
-                        request, response, startTime, jsonResponse, "DATABASE_HIT");
+                        request, response, startTime, jsonResponse, "DATABASE_HIT", url);
                 
                 return CompletableFuture.completedFuture(ResponseEntity.ok(jsonResponse));
             } catch (Exception e) {
@@ -239,7 +260,7 @@ public class ForwardService {
                 // Log the error
                 rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
                         request, startTime, 
-                        "Brand data conversion error: " + e.getMessage(), 500);
+                        "Brand data conversion error: " + e.getMessage(), 500, url);
                 
                 // Fall through to external API call on error
             }
@@ -252,7 +273,7 @@ public class ForwardService {
             
             // Log successful cached response (MEMORY_HIT)
             rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
-                    request, response, startTime, cached, "MEMORY_HIT");
+                    request, response, startTime, cached, "MEMORY_HIT", url);
             
             // Even for cached responses, trigger brand extraction if enabled
             if (brandExtractionEnabled) {
@@ -275,7 +296,7 @@ public class ForwardService {
                     // Log the error asynchronously
                     rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
                             request, startTime, 
-                            "External API error: " + e.getMessage(), 500);
+                            "External API error: " + e.getMessage(), 500, url);
                 })
                 .toFuture()
                 .thenApply(forwardResponse -> {
@@ -285,7 +306,7 @@ public class ForwardService {
                         
                         // Log successful response (MISS - external API call)
                         rivoFetchLoggingService.logSuccessfulPublicRivoFetchAsync(
-                                request, response, startTime, forwardResponse.getBody(), "MISS");
+                                request, response, startTime, forwardResponse.getBody(), "MISS", url);
                         
                         // Trigger brand data extraction for successful responses
                         if (brandExtractionEnabled) {
@@ -296,7 +317,7 @@ public class ForwardService {
                         rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
                                 request, startTime, 
                                 "External API returned status: " + forwardResponse.getStatusCode(),
-                                forwardResponse.getStatusCode().value());
+                                forwardResponse.getStatusCode().value(), url);
                     }
                     return forwardResponse;
                 })
@@ -306,7 +327,7 @@ public class ForwardService {
                     // Log the exception
                     rivoFetchLoggingService.logFailedPublicRivoFetchAsync(
                             request, startTime, 
-                            "Forward operation exception: " + throwable.getMessage(), 500);
+                            "Forward operation exception: " + throwable.getMessage(), 500, url);
                     
                     // Return error response
                     return ResponseEntity.status(500).body("Internal server error");
@@ -471,7 +492,57 @@ public class ForwardService {
         }
         
         // Try normalized URL matching using database query
-        return brandRepository.findByNormalizedWebsite(url);
+        Optional<Brand> normalizedMatch = brandRepository.findByNormalizedWebsite(url);
+        if (normalizedMatch.isPresent()) {
+            return normalizedMatch;
+        }
+        
+        // Try domain-based matching for better URL variations handling
+        String domain = extractDomainFromUrl(url);
+        if (domain != null) {
+            Optional<Brand> domainMatch = brandRepository.findByDomainMatch(domain);
+            if (domainMatch.isPresent()) {
+                return domainMatch;
+            }
+            
+            // Fallback to contains search
+            List<Brand> containsMatches = brandRepository.findByWebsiteContaining(domain);
+            if (!containsMatches.isEmpty()) {
+                return Optional.of(containsMatches.get(0)); // Return the first match
+            }
+        }
+        
+        return Optional.empty();
+    }
+    
+    /**
+     * Extract domain from URL for flexible matching
+     */
+    private String extractDomainFromUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Remove protocol
+            String cleanUrl = url.toLowerCase()
+                    .replace("https://", "")
+                    .replace("http://", "")
+                    .replace("www.", "");
+            
+            // Remove trailing slash and path
+            int slashIndex = cleanUrl.indexOf('/');
+            if (slashIndex > 0) {
+                cleanUrl = cleanUrl.substring(0, slashIndex);
+            } else if (cleanUrl.endsWith("/")) {
+                cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
+            }
+            
+            return cleanUrl;
+        } catch (Exception e) {
+            log.warn("Failed to extract domain from URL: {}", url, e);
+            return null;
+        }
     }
 
     public ForwardConfig getForwardConfig() {

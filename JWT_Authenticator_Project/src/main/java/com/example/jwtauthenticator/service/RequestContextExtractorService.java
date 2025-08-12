@@ -1,13 +1,21 @@
 package com.example.jwtauthenticator.service;
 
+import com.example.jwtauthenticator.entity.User;
+import com.example.jwtauthenticator.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.Optional;
 
 
 /**
@@ -32,6 +40,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class RequestContextExtractorService {
     
     private final DomainValidationService domainValidationService;
+    private final UserRepository userRepository;
     
     // Thread-local cache for request context (Java 21 optimized)
     private static final ThreadLocal<RequestContext> REQUEST_CONTEXT_CACHE = 
@@ -61,6 +70,7 @@ public class RequestContextExtractorService {
                 .userId(authenticationContext.userId())
                 .apiKeyId(authenticationContext.apiKeyId())
                 .requestSource(determineRequestSource(authenticationContext))
+                .queryString(request != null ? request.getQueryString() : null)
                 .build();
                 
             // Cache for current thread (performance optimization)
@@ -113,14 +123,13 @@ public class RequestContextExtractorService {
             log.debug("🔍 Checking header {}: {}", headerName, ip);
             
             if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
-                // Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs)
-                if (ip.contains(",")) {
-                    ip = ip.split(",")[0].strip(); // Java 21 strip() method
-                }
+                // Special handling for CDN-specific headers
+                String processedIp = processCdnSpecificHeader(headerName, ip);
+                String bestIp = extractBestIpFromChain(processedIp);
                 
-                if (isValidIpAddress(ip)) {
-                    log.info("✅ Found valid IP from header {}: {}", headerName, ip);
-                    return ip;
+                if (bestIp != null && isValidIpAddress(bestIp)) {
+                    log.info("✅ Found valid IP from header {}: {}", headerName, bestIp);
+                    return bestIp;
                 }
             }
         }
@@ -208,13 +217,20 @@ public class RequestContextExtractorService {
         try {
             return StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
                 .walk(frames -> frames
-                    .filter(frame -> frame.getClassName().endsWith("Controller"))
+                    .filter(frame -> {
+                        String className = frame.getClassName();
+                        // Look for classes ending with Controller or having Spring annotations
+                        return className.endsWith("Controller") || 
+                               className.contains("controller") ||
+                               isSpringControllerClass(frame.getDeclaringClass());
+                    })
                     .findFirst()
                     .map(frame -> {
                         String className = frame.getClassName();
                         String simpleClassName = className.substring(className.lastIndexOf('.') + 1);
-                        log.debug("🎯 Detected controller: {} -> {}", simpleClassName, frame.getMethodName());
-                        return new ControllerContext(simpleClassName, frame.getMethodName());
+                        String methodName = frame.getMethodName();
+                        log.debug("🎯 Detected controller: {} -> {}", simpleClassName, methodName);
+                        return new ControllerContext(simpleClassName, methodName);
                     })
                     .orElseGet(() -> {
                         log.debug("⚠️ No controller detected in stack, using fallback");
@@ -224,6 +240,18 @@ public class RequestContextExtractorService {
         } catch (Exception e) {
             log.warn("Failed to extract controller context using StackWalker", e);
             return new ControllerContext("ErrorController", "errorMethod");
+        }
+    }
+    
+    /**
+     * 🏷️ Check if a class is a Spring controller
+     */
+    private boolean isSpringControllerClass(Class<?> clazz) {
+        try {
+            return clazz.isAnnotationPresent(Controller.class) ||
+                   clazz.isAnnotationPresent(RestController.class);
+        } catch (Exception e) {
+            return false;
         }
     }
     
@@ -241,9 +269,13 @@ public class RequestContextExtractorService {
                 // Determine if it's JWT or API Key authentication
                 if (details instanceof ApiKeyAuthenticationDetails apiKeyDetails) {
                     return new AuthenticationContext(null, apiKeyDetails.getApiKeyId());
-                } else if (principal != null && principal.startsWith("DOMBR")) {
-                    // JWT authentication with user ID
+                } else if (principal != null && principal.startsWith("MRTFY")) {
+                    // JWT authentication with user ID already in principal
                     return new AuthenticationContext(principal, null);
+                } else if (principal != null && !principal.equals("anonymousUser")) {
+                    // JWT authentication with username - need to get user ID
+                    String userId = getUserIdFromUsername(principal);
+                    return new AuthenticationContext(userId, null);
                 }
             }
             
@@ -251,6 +283,26 @@ public class RequestContextExtractorService {
         } catch (Exception e) {
             log.debug("Could not extract authentication context", e);
             return new AuthenticationContext(null, null);
+        }
+    }
+    
+    /**
+     * 🔍 Get user ID from username (for JWT authentication)
+     */
+    private String getUserIdFromUsername(String username) {
+        try {
+            Optional<User> userOptional = userRepository.findByUsername(username);
+            if (userOptional.isPresent()) {
+                String userId = userOptional.get().getId();
+                log.debug("Found user ID {} for username {}", userId, username);
+                return userId;
+            } else {
+                log.debug("No user found for username: {}", username);
+                return null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not get user ID for username: {}", username, e);
+            return null;
         }
     }
     
@@ -275,7 +327,7 @@ public class RequestContextExtractorService {
         if (authenticationContext.apiKeyId() != null) {
             return RequestSource.API_KEY;
         } else if (authenticationContext.userId() != null) {
-            return RequestSource.JWT_AUTH;
+            return RequestSource.AUTHENTICATED;
         } else {
             return RequestSource.PUBLIC;
         }
@@ -284,52 +336,133 @@ public class RequestContextExtractorService {
     // ================== PRIVATE HELPER METHODS ==================
     
     /**
-     * Basic IP address validation (optimized for Java 21)
+     * Enhanced IP address validation (IPv4 and IPv6 support)
      */
     private boolean isValidIpAddress(String ip) {
         if (ip == null || ip.isBlank()) {
             return false;
         }
 
-        // Accept localhost and private IPs for testing
-        if (isLocalOrPrivateIp(ip)) {
+        try {
+            // Use Java's built-in IP validation for both IPv4 and IPv6
+            InetAddress.getByName(ip);
             return true;
-        }
-
-        // Basic IPv4 validation (simplified but effective)
-        String[] parts = ip.split("\\.");
-        if (parts.length != 4) {
+        } catch (UnknownHostException e) {
+            log.debug("Invalid IP address format: {}", ip);
             return false;
         }
-
+    }
+    
+    /**
+     * Enhanced check for local or private IP ranges using InetAddress
+     */
+    private boolean isLocalOrPrivateIp(String ip) {
+        if (ip == null) return false;
+        
         try {
-            for (String part : parts) {
-                int num = Integer.parseInt(part);
-                if (num < 0 || num > 255) {
-                    return false;
-                }
-            }
-            return true;
+            InetAddress addr = InetAddress.getByName(ip);
+            // Use Java's built-in methods for accurate detection
+            return addr.isLoopbackAddress() || addr.isSiteLocalAddress() || addr.isLinkLocalAddress();
+        } catch (UnknownHostException e) {
+            // Fallback to string-based check for edge cases
+            return "127.0.0.1".equals(ip) || 
+                   ip.startsWith("192.168.") || 
+                   ip.startsWith("10.") || 
+                   (ip.startsWith("172.") && isInRange172(ip));
+        }
+    }
+    
+    /**
+     * Helper method for 172.16.0.0/12 range validation (fallback only)
+     */
+    private boolean isInRange172(String ip) {
+        try {
+            String[] parts = ip.split("\\.");
+            if (parts.length != 4) return false;
+            int secondOctet = Integer.parseInt(parts[1]);
+            return secondOctet >= 16 && secondOctet <= 31;
         } catch (NumberFormatException e) {
             return false;
         }
     }
     
     /**
-     * Check if IP is local or private range
+     * Extract best IP from comma-separated chain (Priority: Public > Private > Localhost)
      */
-    private boolean isLocalOrPrivateIp(String ip) {
+    private String extractBestIpFromChain(String ipChain) {
+        if (!ipChain.contains(",")) {
+            return ipChain.strip();
+        }
+        
+        String[] ips = ipChain.split(",");
+        log.debug("🔗 Analyzing IP chain with {} addresses", ips.length);
+        
+        String publicIp = null;
+        String privateIp = null;
+        String localhostIp = null;
+        
+        for (String ip : ips) {
+            ip = ip.strip();
+            if (!isValidIpAddress(ip)) continue;
+            
+            if (isPublicIp(ip)) {
+                publicIp = ip;
+                log.debug("🌍 Found public IP in chain: {}", ip);
+                break; // Public IP has highest priority
+            } else if (isLocalOrPrivateIp(ip)) {
+                if (isLocalhostIp(ip) && localhostIp == null) {
+                    localhostIp = ip;
+                } else if (privateIp == null) {
+                    privateIp = ip;
+                }
+            }
+        }
+        
+        String selectedIp = publicIp != null ? publicIp : 
+                           privateIp != null ? privateIp : 
+                           localhostIp != null ? localhostIp : 
+                           ips[0].strip(); // Fallback to first IP
+        
+        log.debug("🎯 Selected IP from chain: {}", selectedIp);
+        return selectedIp;
+    }
+    
+    /**
+     * Check if IP is public (not private/localhost)
+     */
+    private boolean isPublicIp(String ip) {
+        return isValidIpAddress(ip) && !isLocalOrPrivateIp(ip);
+    }
+    
+    /**
+     * Check if IP is localhost
+     */
+    private boolean isLocalhostIp(String ip) {
         if (ip == null) return false;
-        return "127.0.0.1".equals(ip) || 
-               ip.startsWith("192.168.") || 
-               ip.startsWith("10.") || 
-               ip.startsWith("172.16.") || 
-               ip.startsWith("172.17.") || 
-               ip.startsWith("172.18.") || 
-               ip.startsWith("172.19.") ||
-               ip.startsWith("172.2") || // 172.20-29
-               ip.startsWith("172.30") ||
-               ip.startsWith("172.31");
+        
+        try {
+            InetAddress addr = InetAddress.getByName(ip);
+            return addr.isLoopbackAddress();
+        } catch (UnknownHostException e) {
+            return "127.0.0.1".equals(ip) || "::1".equals(ip);
+        }
+    }
+    
+    /**
+     * Process CDN-specific header formats
+     */
+    private String processCdnSpecificHeader(String headerName, String headerValue) {
+        // AWS CloudFront uses "IP:PORT" format
+        if ("CloudFront-Viewer-Address".equals(headerName) && headerValue.contains(":")) {
+            String[] parts = headerValue.split(":");
+            if (parts.length >= 2) {
+                log.debug("🌩️ CloudFront header detected, extracting IP from: {}", headerValue);
+                return parts[0]; // Return just the IP part
+            }
+        }
+        
+        // For other headers, return as-is
+        return headerValue;
     }
     
     /**
@@ -345,6 +478,7 @@ public class RequestContextExtractorService {
             .userId(null)
             .apiKeyId(null)
             .requestSource(RequestSource.PUBLIC)
+            .queryString(null)
             .build();
     }
     
@@ -371,7 +505,8 @@ public class RequestContextExtractorService {
         String methodName,
         String userId,
         String apiKeyId,
-        RequestSource requestSource
+        RequestSource requestSource,
+        String queryString
     ) {
         public static Builder builder() {
             return new Builder();
@@ -386,6 +521,7 @@ public class RequestContextExtractorService {
             private String userId;
             private String apiKeyId;
             private RequestSource requestSource;
+            private String queryString;
             
             public Builder clientIp(String clientIp) { this.clientIp = clientIp; return this; }
             public Builder domain(String domain) { this.domain = domain; return this; }
@@ -395,10 +531,11 @@ public class RequestContextExtractorService {
             public Builder userId(String userId) { this.userId = userId; return this; }
             public Builder apiKeyId(String apiKeyId) { this.apiKeyId = apiKeyId; return this; }
             public Builder requestSource(RequestSource requestSource) { this.requestSource = requestSource; return this; }
+            public Builder queryString(String queryString) { this.queryString = queryString; return this; }
             
             public RequestContext build() {
                 return new RequestContext(clientIp, domain, userAgent, controllerName, 
-                                        methodName, userId, apiKeyId, requestSource);
+                                        methodName, userId, apiKeyId, requestSource, queryString);
             }
         }
     }
@@ -408,7 +545,7 @@ public class RequestContextExtractorService {
      */
     public enum RequestSource {
         PUBLIC("Public Access"),
-        JWT_AUTH("JWT Authentication"), 
+        AUTHENTICATED("Authenticated Access"), 
         API_KEY("API Key Authentication");
         
         private final String description;

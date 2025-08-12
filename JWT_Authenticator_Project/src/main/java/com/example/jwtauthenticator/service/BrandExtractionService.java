@@ -63,17 +63,41 @@ public class BrandExtractionService {
     }
     
     private Optional<Brand> findExistingBrand(String url, BrandExtractionResponse response) {
-        // First try to find by website URL
+        // First try to find by exact website URL
         Optional<Brand> brandByUrl = brandRepository.findByWebsite(url);
         if (brandByUrl.isPresent()) {
             return brandByUrl;
         }
         
+        // Try normalized URL matching
+        Optional<Brand> normalizedMatch = brandRepository.findByNormalizedWebsite(url);
+        if (normalizedMatch.isPresent()) {
+            return normalizedMatch;
+        }
+        
+        // Try domain-based matching
+        String domain = extractDomainFromUrl(url);
+        if (domain != null) {
+            Optional<Brand> domainMatch = brandRepository.findByDomainMatch(domain);
+            if (domainMatch.isPresent()) {
+                return domainMatch;
+            }
+        }
+        
         // Then try by company website from response
         if (response.getCompany() != null && StringUtils.hasText(response.getCompany().getWebsite())) {
-            Optional<Brand> brandByCompanyUrl = brandRepository.findByWebsite(response.getCompany().getWebsite());
-            if (brandByCompanyUrl.isPresent()) {
-                return brandByCompanyUrl;
+            String companyWebsite = cleanWebsiteUrl(response.getCompany().getWebsite());
+            if (companyWebsite != null) {
+                Optional<Brand> brandByCompanyUrl = brandRepository.findByWebsite(companyWebsite);
+                if (brandByCompanyUrl.isPresent()) {
+                    return brandByCompanyUrl;
+                }
+                
+                // Try normalized matching for company website
+                Optional<Brand> companyNormalizedMatch = brandRepository.findByNormalizedWebsite(companyWebsite);
+                if (companyNormalizedMatch.isPresent()) {
+                    return companyNormalizedMatch;
+                }
             }
         }
         
@@ -86,8 +110,11 @@ public class BrandExtractionService {
     }
     
     private Brand createNewBrand(String url, BrandExtractionResponse response) {
+        // Normalize the input URL for consistent storage
+        String normalizedUrl = normalizeUrlForStorage(url);
+        
         Brand brand = Brand.builder()
-                .website(url)
+                .website(normalizedUrl)
                 .lastExtractionTimestamp(LocalDateTime.now())
                 .extractionMessage(response.getMessage())
                 .freshnessScore(100)
@@ -118,10 +145,9 @@ public class BrandExtractionService {
                 company.getCompanySize() : company.getEmployees();
             brand.setEmployees(employees);
             
-            // Use cleaned company website if available, otherwise use the original URL
-            if (StringUtils.hasText(company.getWebsite())) {
-                brand.setWebsite(cleanWebsiteUrl(company.getWebsite()));
-            }
+            // Keep the normalized input URL instead of overwriting with API response website
+            // This ensures consistent URL matching for future requests
+            log.info("Storing brand with normalized URL: {} (original: {})", normalizedUrl, url);
             
             // Handle new fields - store as JSON strings for performance
             try {
@@ -476,15 +502,15 @@ public class BrandExtractionService {
         };
     }
     
-    private String extractDomainFromUrl(String url) {
-        try {
-            // Simple domain extraction
-            String domain = url.replaceAll("^https?://", "").replaceAll("^www\\.", "").split("/")[0];
-            return domain.substring(0, 1).toUpperCase() + domain.substring(1);
-        } catch (Exception e) {
-            return "Unknown Brand";
-        }
-    }
+    // private String extractDomainFromUrl(String url) {
+    //     try {
+    //         // Simple domain extraction
+    //         String domain = url.replaceAll("^https?://", "").replaceAll("^www\\.", "").split("/")[0];
+    //         return domain.substring(0, 1).toUpperCase() + domain.substring(1);
+    //     } catch (Exception e) {
+    //         return "Unknown Brand";
+    //     }
+    // }
     
     private String extractFileNameFromUrl(String url) {
         try {
@@ -511,6 +537,59 @@ public class BrandExtractionService {
         cleaned = cleaned.replaceAll("\\s*for\\s+.*$", "");
         
         return cleaned.trim();
+    }
+    
+    /**
+     * Normalize URL for consistent storage and matching
+     */
+    private String normalizeUrlForStorage(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return url;
+        }
+        
+        String normalized = url.trim();
+        
+        // Ensure protocol is present
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            normalized = "https://" + normalized;
+        }
+        
+        // Remove trailing slash for consistency
+        if (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        
+        return normalized;
+    }
+    
+    /**
+     * Extract domain from URL for flexible matching
+     */
+    private String extractDomainFromUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Remove protocol
+            String cleanUrl = url.toLowerCase()
+                    .replace("https://", "")
+                    .replace("http://", "")
+                    .replace("www.", "");
+            
+            // Remove trailing slash and path
+            int slashIndex = cleanUrl.indexOf('/');
+            if (slashIndex > 0) {
+                cleanUrl = cleanUrl.substring(0, slashIndex);
+            } else if (cleanUrl.endsWith("/")) {
+                cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
+            }
+            
+            return cleanUrl;
+        } catch (Exception e) {
+            log.warn("Failed to extract domain from URL: {}", url, e);
+            return null;
+        }
     }
     
     /**

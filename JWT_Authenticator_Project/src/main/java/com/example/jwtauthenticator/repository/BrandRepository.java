@@ -26,8 +26,13 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     List<Brand> findByWebsiteContaining(@Param("domain") String domain);
     
     @Query("SELECT b FROM Brand b WHERE " +
-           "LOWER(REPLACE(REPLACE(REPLACE(b.website, 'https://', ''), 'http://', ''), 'www.', '')) = " +
-           "LOWER(REPLACE(REPLACE(REPLACE(:url, 'https://', ''), 'http://', ''), 'www.', ''))")
+           "LOWER(TRIM(TRAILING '/' FROM REPLACE(REPLACE(REPLACE(b.website, 'https://', ''), 'http://', ''), 'www.', ''))) " +
+           "LIKE LOWER(CONCAT('%', :domain, '%')) ORDER BY LENGTH(b.website) ASC")
+    Optional<Brand> findByDomainMatch(@Param("domain") String domain);
+    
+    @Query("SELECT b FROM Brand b WHERE " +
+           "LOWER(TRIM(TRAILING '/' FROM REPLACE(REPLACE(REPLACE(b.website, 'https://', ''), 'http://', ''), 'www.', ''))) = " +
+           "LOWER(TRIM(TRAILING '/' FROM REPLACE(REPLACE(REPLACE(:url, 'https://', ''), 'http://', ''), 'www.', '')))")
     Optional<Brand> findByNormalizedWebsite(@Param("url") String url);
     
     // For future automated updates

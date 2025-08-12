@@ -55,10 +55,9 @@ public class StreamlinedUsageTracker {
      * Call this method from your controller after successful/failed /rivofetch calls.
      * It will handle all necessary tracking asynchronously.
      * 
-     * ✅ CRITICAL FIX: @Transactional must be on @Async method for transaction context
+     * ✅ PERFORMANCE FIX: Removed @Transactional to prevent connection leaks with @Async
      */
     @Async("transactionalAsyncExecutor")
-    @Transactional(rollbackFor = Exception.class)
     public CompletableFuture<Void> trackRivofetchCall(
             UUID apiKeyId,
             String userId,
@@ -75,20 +74,21 @@ public class StreamlinedUsageTracker {
             log.debug("🎯 Tracking /rivofetch call: apiKey={}, user={}, status={}, success={}", 
                      apiKeyId, userId, responseStatus, isSuccessful);
             
-            // STEP 1: Track audit log (business logic directly - transaction already active)
+            // STEP 1: Track audit log (each method has its own @Transactional)
             trackAuditLogSync(apiKeyId, userId, clientIp, domain, userAgent, 
                             responseStatus, responseTimeMs, errorMessage, isSuccessful);
             
-            // STEP 2: Track quota usage (business logic directly - transaction already active)
+            // STEP 2: Track quota usage (each method has its own @Transactional)
             trackQuotaUsageSync(apiKeyId, userId, isSuccessful);
             
             log.debug("✅ Async /rivofetch tracking completed: apiKey={}, status={}", apiKeyId, responseStatus);
             return CompletableFuture.completedFuture(null);
             
         } catch (Exception e) {
-            log.error("❌ Failed to track /rivofetch call, rolling back transaction: apiKey={}, status={}", 
+            log.error("❌ Failed to track /rivofetch call: apiKey={}, status={}", 
                      apiKeyId, responseStatus, e);
-            throw e; // Let Spring handle the rollback
+            // Don't rethrow - we don't want to break the API call due to tracking issues
+            return CompletableFuture.completedFuture(null);
         }
     }
     
@@ -291,9 +291,10 @@ public class StreamlinedUsageTracker {
     // ==================== SYNCHRONOUS TRANSACTIONAL METHODS ====================
     
     /**
-     * 📋 Track in audit log - SYNCHRONOUS VERSION (transaction managed by parent)
+     * 📋 Track in audit log - SYNCHRONOUS VERSION with own transaction
      * ✅ FIXED: Create audit log with correct path (includes context path)
      */
+    @Transactional(rollbackFor = Exception.class)
     private void trackAuditLogSync(UUID apiKeyId, String userId, String clientIp, 
                                   String domain, String userAgent, Integer responseStatus, 
                                   Long responseTimeMs, String errorMessage, boolean isSuccessful) {
@@ -325,8 +326,9 @@ public class StreamlinedUsageTracker {
     }
     
     /**
-     * 💰 Track quota usage - SYNCHRONOUS VERSION (transaction managed by parent)
+     * 💰 Track quota usage - SYNCHRONOUS VERSION with own transaction
      */
+    @Transactional(rollbackFor = Exception.class)
     private void trackQuotaUsageSync(UUID apiKeyId, String userId, boolean isSuccessful) {
         try {
             String monthYear = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));

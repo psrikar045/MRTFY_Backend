@@ -6,7 +6,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.transaction.annotation.Propagation;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,11 +48,65 @@ public class RivoFetchIdGeneratorService {
     private final ConcurrentHashMap<String, Long> sequenceCache = new ConcurrentHashMap<>();
     
     /**
+     * 🚀 Initialize sequence on service startup
+     */
+    @jakarta.annotation.PostConstruct
+    public void initializeSequence() {
+        try {
+            log.info("🚀 Initializing RivoFetch ID sequence...");
+            
+            // Step 1: Ensure sequence exists
+            ensureSequenceExists();
+            
+            // Step 2: Fix sequence value based on existing records
+            fixSequenceValue();
+            
+            log.info("✅ RivoFetch ID sequence initialized successfully");
+        } catch (Exception e) {
+            log.error("❌ Failed to initialize RivoFetch ID sequence: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 🔧 Fix sequence value based on existing records (SIMPLE)
+     */
+    @Transactional
+    public void fixSequenceValue() {
+        try {
+            // Find the highest sequence number from existing RIVO9 records
+            // PostgreSQL: SUBSTRING(string, start, length) - extract 6 digits after "RIVO9"
+            String findMaxSql = """
+                SELECT COALESCE(MAX(CAST(SUBSTRING(rivo_fetch_log_id, 6, 6) AS INTEGER)), 0)
+                FROM rivo_fetch_request_logs 
+                WHERE rivo_fetch_log_id ~ '^RIVO9[0-9]{6}$'
+                """;
+            
+            Integer maxSequence = jdbcTemplate.queryForObject(findMaxSql, Integer.class);
+            long nextValue = (maxSequence != null ? maxSequence : 0) + 1;
+            
+            log.info("🔧 Found max sequence: {}, setting next value to: {}", maxSequence, nextValue);
+            
+            // Set the sequence to the correct next value
+            String setSeqSql = "SELECT setval(?, ?, false)"; // false = next call returns this value
+            jdbcTemplate.queryForObject(setSeqSql, Long.class, SEQUENCE_NAME, nextValue);
+            
+            // Verify it worked
+            String checkSql = "SELECT last_value FROM " + SEQUENCE_NAME;
+            Long currentValue = jdbcTemplate.queryForObject(checkSql, Long.class);
+            
+            log.info("✅ Sequence fixed - Next value will be: {}, Current last_value: {}", nextValue, currentValue);
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to fix sequence value: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
      * 🎯 Generate next RivoFetch ID in RIVO9XXXXXX format
      * 
      * @return Generated ID in RIVO9XXXXXX format
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String generateRivoFetchId() {
         try {
             // Try to get next value from database sequence
@@ -210,8 +266,8 @@ public class RivoFetchIdGeneratorService {
         
         try {
             String sql = "SELECT setval(?, ?, true)";
-            jdbcTemplate.update(sql, SEQUENCE_NAME, newValue);
-            
+            // jdbcTemplate.update(sql, SEQUENCE_NAME, newValue);
+            jdbcTemplate.queryForObject(sql, Long.class, SEQUENCE_NAME, newValue);
             log.info("✅ Successfully reset RivoFetch sequence to: {}", newValue);
             return true;
             
@@ -312,5 +368,110 @@ public class RivoFetchIdGeneratorService {
         
         log.debug("🎯 Generated batch of {} RivoFetch IDs", batchSize);
         return ids;
+    }
+    
+    /**
+     * 🔄 Initialize sequence from existing records
+     */
+    @Transactional
+    public void initializeSequenceFromExistingRecords() {
+        try {
+            // First, let's debug what records exist
+            debugExistingRecords();
+            
+            long nextValue = getNextStartValueFromExistingRecords();
+            
+            // Get current sequence value before setting
+            Long currentSeqValue = getCurrentSequenceValue();
+            log.info("🔍 Current sequence value BEFORE setting: {}", currentSeqValue);
+            
+            // Set sequence to the correct next value
+            // Using setval with 'false' means the NEXT call to nextval() will return this value
+            String sql = "SELECT setval(?, ?, false)";
+jdbcTemplate.queryForObject(sql, Long.class, SEQUENCE_NAME, nextValue);            
+            // Verify the sequence was set correctly
+            Long newSeqValue = getCurrentSequenceValue();
+            log.info("🔄 Initialized RivoFetch sequence - Previous: {}, Set to: {}, Current: {}", 
+                    currentSeqValue, nextValue, newSeqValue);
+            
+        } catch (DataAccessException e) {
+            log.error("❌ Failed to initialize sequence from existing records: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 🔍 Debug existing records to understand the data
+     */
+    private void debugExistingRecords() {
+        try {
+            String sql = """
+                SELECT rivo_fetch_log_id, SUBSTRING(rivo_fetch_log_id, 6) as sequence_part
+                FROM rivo_fetch_request_logs 
+                WHERE rivo_fetch_log_id LIKE 'RIVO9%' 
+                ORDER BY rivo_fetch_log_id
+                """;
+            
+            List<Map<String, Object>> records = jdbcTemplate.queryForList(sql);
+            log.info("🔍 DEBUG: Found {} existing RIVO9 records:", records.size());
+            
+            for (Map<String, Object> record : records) {
+                log.info("🔍 DEBUG: ID: {}, Sequence Part: {}", 
+                        record.get("rivo_fetch_log_id"), record.get("sequence_part"));
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to debug existing records: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 🔍 Get current sequence value
+     */
+    private Long getCurrentSequenceValue() {
+        try {
+            String sql = "SELECT last_value FROM " + SEQUENCE_NAME;
+            return jdbcTemplate.queryForObject(sql, Long.class);
+        } catch (Exception e) {
+            log.error("❌ Failed to get current sequence value: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 🔍 Get next start value based on existing records
+     */
+    private long getNextStartValueFromExistingRecords() {
+        try {
+            // Find the highest sequence number from existing records
+            // RIVO9XXXXXX format: extract the 6-digit number after "RIVO9"
+            // "RIVO9" = 5 chars, so we need to start from position 6 (1-based indexing)
+            String sql = """
+                SELECT COALESCE(MAX(CAST(SUBSTRING(rivo_fetch_log_id, 6) AS INTEGER)), 0) + 1
+                FROM rivo_fetch_request_logs 
+                WHERE rivo_fetch_log_id LIKE 'RIVO9%' 
+                AND LENGTH(rivo_fetch_log_id) = 11
+                AND SUBSTRING(rivo_fetch_log_id, 6) ~ '^[0-9]+$'
+                """;
+            
+            log.info("🔍 Executing SQL to find max sequence: {}", sql);
+            
+            Long maxSequence = jdbcTemplate.queryForObject(sql, Long.class);
+            long nextValue = (maxSequence != null) ? maxSequence : 1;
+            
+            log.info("🔍 Raw max sequence from DB: {}, calculated next value: {}", maxSequence, nextValue);
+            
+            // Ensure it's within bounds
+            if (nextValue > MAX_SEQUENCE_VALUE) {
+                nextValue = 1; // Cycle back to 1
+                log.warn("🔄 Next value {} exceeds max {}, cycling back to 1", nextValue, MAX_SEQUENCE_VALUE);
+            }
+            
+            log.info("🔍 Final next sequence value: {}", nextValue);
+            return nextValue;
+            
+        } catch (DataAccessException e) {
+            log.error("❌ Failed to get next start value from existing records: {}", e.getMessage(), e);
+            return 1; // Default to 1 if query fails
+        }
     }
 }

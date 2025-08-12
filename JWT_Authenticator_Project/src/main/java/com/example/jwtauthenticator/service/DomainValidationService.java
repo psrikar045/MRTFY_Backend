@@ -6,6 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.IDN;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -284,7 +288,35 @@ public class DomainValidationService {
             return null;
         }
 
-        String domain = urlOrDomain.trim();
+        String input = urlOrDomain.trim();
+        
+        // Handle URL encoding first
+        try {
+            input = URLDecoder.decode(input, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.debug("URL decoding failed for '{}', using original", input);
+        }
+        
+        // Try robust URL parsing first
+        try {
+            if (input.startsWith("http://") || input.startsWith("https://")) {
+                URL url = new URL(input);
+                String host = url.getHost();
+                return host != null ? normalizeDomain(host) : null;
+            }
+        } catch (Exception e) {
+            log.debug("URL parsing failed for '{}', using fallback method", input);
+        }
+        
+        // Fallback to manual parsing for malformed URLs or domain-only input
+        return extractDomainManually(input);
+    }
+    
+    /**
+     * Manual domain extraction for malformed URLs or domain-only input
+     */
+    private String extractDomainManually(String input) {
+        String domain = input;
 
         // Remove protocol if present
         if (domain.startsWith("http://") || domain.startsWith("https://")) {
@@ -317,7 +349,7 @@ public class DomainValidationService {
     }
 
     /**
-     * Normalize domain for consistent comparison
+     * Enhanced domain normalization with internationalized domain support
      * Handles various domain formats: xamply.com, xamplyfy.co, xamplyfy.in, etc.
      */
     public String normalizeDomain(String domain) {
@@ -335,6 +367,13 @@ public class DomainValidationService {
         // Remove trailing dot if present
         if (normalized.endsWith(".")) {
             normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        // Handle internationalized domains (IDN to ASCII conversion)
+        try {
+            normalized = IDN.toASCII(normalized);
+        } catch (IllegalArgumentException e) {
+            log.debug("IDN conversion failed for domain '{}', using original", normalized);
         }
 
         return normalized;

@@ -144,6 +144,17 @@ public interface RivoFetchRequestLogRepository extends JpaRepository<RivoFetchRe
             UUID apiKeyId, Boolean success, LocalDateTime since);
     
     /**
+     * Count requests by user ID within time range
+     */
+    long countByRivoFetchUserIdAndRivoFetchTimestampAfter(String userId, LocalDateTime since);
+    
+    /**
+     * Count successful requests by user ID within time range
+     */
+    long countByRivoFetchUserIdAndRivoFetchSuccessAndRivoFetchTimestampAfter(
+            String userId, Boolean success, LocalDateTime since);
+    
+    /**
      * Count requests by cache hit type within time range
      */
     long countByRivoFetchCacheHitTypeAndRivoFetchTimestampAfter(String cacheHitType, LocalDateTime since);
@@ -162,6 +173,11 @@ public interface RivoFetchRequestLogRepository extends JpaRepository<RivoFetchRe
      * Count requests by success status after timestamp
      */
     long countByRivoFetchSuccessAndRivoFetchTimestampAfter(Boolean success, LocalDateTime since);
+    
+    /**
+     * Count ALL requests by success status (for entire application history)
+     */
+    long countByRivoFetchSuccess(Boolean success);
     
     // ==================== AGGREGATION QUERIES ====================
     
@@ -320,7 +336,8 @@ public interface RivoFetchRequestLogRepository extends JpaRepository<RivoFetchRe
         return findByRivoFetchApiKeyIdAndRivoFetchTimestampAfterOrderByRivoFetchTimestampDesc(
                 apiKeyId, since);
     }
-    
+   
+  boolean existsByRivoFetchLogId(String rivoFetchLogId);
     /**
      * Find recent logs for API key with timestamp after
      */

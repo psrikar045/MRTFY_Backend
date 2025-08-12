@@ -66,6 +66,10 @@ public class ApiKeyResponseDTO {
     @Schema(description = "List of granted scopes/permissions")
     private List<String> scopes;
     
+    @Schema(description = "Environment where the API key is used", 
+            example = "production", allowableValues = {"production", "development", "staging"})
+    private String environment;
+    
     @Schema(description = "Encrypted API key value for frontend decryption", 
             example = "v1:base64_salt:base64_iv:base64_encrypted:base64_auth_tag")
     private String encryptedKeyValue;
@@ -90,6 +94,7 @@ public class ApiKeyResponseDTO {
                 .allowedDomains(apiKey.getAllowedDomainsAsList())
                 .rateLimitTier(apiKey.getRateLimitTier() != null ? apiKey.getRateLimitTier().name() : null)
                 .scopes(apiKey.getScopesAsList())
+                .environment(apiKey.getEnvironment() != null ? apiKey.getEnvironment().getValue() : null)
                 .encryptedKeyValue(apiKey.getEncryptedKeyValue())
                 .build();
     }

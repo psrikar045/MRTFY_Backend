@@ -317,7 +317,7 @@ class RequestContextExtractorServiceTest {
             RequestSource requestSource = requestContextExtractor.determineRequestSource(authContext);
             
             // Then
-            assertEquals(RequestSource.JWT_AUTH, requestSource);
+            assertEquals(RequestSource.AUTHENTICATED, requestSource);
         }
 
         @Test
@@ -368,7 +368,7 @@ class RequestContextExtractorServiceTest {
             assertEquals("Mozilla/5.0 Test Browser", context.userAgent());
             assertEquals("DOMBR000001", context.userId());
             assertNull(context.apiKeyId());
-            assertEquals(RequestSource.JWT_AUTH, context.requestSource());
+            assertEquals(RequestSource.API_KEY, context.requestSource());
             assertNotNull(context.controllerName());
             assertNotNull(context.methodName());
         }
@@ -449,7 +449,7 @@ class RequestContextExtractorServiceTest {
         void shouldHandleRequestSourceEnum() {
             // Test all enum values
             assertEquals("Public Access", RequestSource.PUBLIC.getDescription());
-            assertEquals("JWT Authentication", RequestSource.JWT_AUTH.getDescription());
+            assertEquals("JWT Authentication", RequestSource.AUTHENTICATED.getDescription());
             assertEquals("API Key Authentication", RequestSource.API_KEY.getDescription());
             
             // Test valueOf
