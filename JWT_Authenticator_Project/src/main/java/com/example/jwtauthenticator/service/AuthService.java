@@ -19,11 +19,9 @@ import com.example.jwtauthenticator.repository.LoginLogRepository;
 import com.example.jwtauthenticator.repository.PasswordResetCodeRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
-import com.example.jwtauthenticator.service.ApiKeyService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -43,8 +41,6 @@ import jakarta.transaction.Transactional;
 @Slf4j
 public class AuthService {
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -75,9 +71,9 @@ public class AuthService {
 
     @Autowired
     private IdGeneratorService idGeneratorService;
-
+    
     @Autowired
-    private ApiKeyService apiKeyService;
+    private EnhancedApiKeyService enhancedApiKeyService;
 
     @Transactional
     public RegisterResponse registerUser(RegisterRequest request) {
@@ -379,21 +375,41 @@ public class AuthService {
             log.info("🔧 Creating default API key for user: {} (ID: {}) with domain: {}", 
                 user.getUsername(), user.getId(), defaultDomain);
             log.info("📋 Request details - Name: {}, Prefix: {}, Tier: {}, Scopes: {}", 
-                uniqueKeyName, "rivo9", "FREE_TIER", defaultFreeScopes);
+                uniqueKeyName, "rivo9_", "FREE_TIER", defaultFreeScopes);
             
             ApiKeyCreateRequestDTO request = ApiKeyCreateRequestDTO.builder()
                 .name(uniqueKeyName)
                 .description("Auto-generated API key for Free tier access - 100 calls/month")
                 .registeredDomain(defaultDomain) // REQUIRED field
-                .prefix("rivo9")
+                .prefix("rivo9_")
                 .rateLimitTier("FREE_TIER")
                 .scopes(defaultFreeScopes)  // ✅ FIXED: Valid ApiKeyScope enum values
                 .build();
             
-            log.info("✅ Calling apiKeyService.createApiKey with userFkId: {}", user.getId());
-            ApiKeyGeneratedResponseDTO result = apiKeyService.createApiKey(user.getId(), request);
-            log.info("🎉 Successfully created API key: {}", result.getPrefix());
-            return result;
+            log.info("✅ Calling enhancedApiKeyService.createApiKeyWithPlanValidation for complete field population");
+            EnhancedApiKeyService.ApiKeyCreateResult result = enhancedApiKeyService.createApiKeyWithPlanValidation(
+                request, 
+                user.getId(), 
+                com.example.jwtauthenticator.enums.ApiKeyEnvironment.TESTING
+            );
+            
+            if (!result.isSuccess()) {
+                log.error("❌ Enhanced API key creation failed: {} (Code: {})", result.getErrorMessage(), result.getErrorCode());
+                throw new RuntimeException("Enhanced API key creation failed: " + result.getErrorMessage());
+            }
+            
+            // Convert to expected response format
+            ApiKeyGeneratedResponseDTO response = ApiKeyGeneratedResponseDTO.builder()
+                .id(result.getApiKey().getId())
+                .name(result.getApiKey().getName())
+                .description(result.getApiKey().getDescription())
+                .prefix(result.getApiKey().getPrefix())
+                .keyValue(result.getRawApiKey())
+                .registeredDomain(result.getApiKey().getRegisteredDomain())
+                .build();
+            
+            log.info("🎉 Successfully created enhanced API key with all fields populated: {}", response.getPrefix());
+            return response;
         } catch (IllegalArgumentException e) {
             log.error("❌ Validation error creating API key for user {}: {}", user.getUsername(), e.getMessage());
             throw new RuntimeException("Validation failed during API key creation: " + e.getMessage());
@@ -430,7 +446,7 @@ public class AuthService {
             // ✅ FRONTEND URL FIX: Use correct frontend URLs
             String loginUrl = "http://202.65.155.117/auth/login";  // ✅ FIXED: Frontend login URL
             String dashboardUrl = "http://202.65.155.117/dashboard/api-keys";  // ✅ FIXED: Frontend dashboard URL
-            String apiDocsUrl = appConfig.getApiUrl("/docs");
+            String apiDocsUrl = "http://202.65.155.117/auth/login";  // ✅ FIXED: Redirect to login since no API docs yet
             
             model.put("loginUrl", loginUrl);
             model.put("dashboardUrl", dashboardUrl);

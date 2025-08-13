@@ -17,12 +17,8 @@ import org.springframework.web.servlet.view.freemarker.FreeMarkerConfigurer;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
-import jakarta.activation.DataSource;
-import java.io.ByteArrayInputStream;
+
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -232,7 +228,7 @@ public class EmailService {
             
             String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
             
-            sendHtmlEmail(to, "Reset Your Marketify Password", emailContent);
+            sendHtmlEmail(to, "Reset Your RIVO9 Password", emailContent);
             logger.info("Password reset code email sent successfully to: {}", to);
         } catch (IOException e) {
             logger.error("Template error when sending password reset code to {}: {}", to, e.getMessage());
@@ -251,7 +247,7 @@ public class EmailService {
     
     private void sendFallbackPasswordResetCode(String to, String username, String verificationCode) {
         logger.info("Sending fallback plain text password reset code to: {}", to);
-        String subject = "Password Reset Verification Code - Marketify";
+        String subject = "Password Reset Verification Code - RIVO9";
         
         String emailBody = """
             Hello %s,
@@ -265,7 +261,7 @@ public class EmailService {
             If you didn't request this password reset, please ignore this email.
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
             """.formatted(username, verificationCode);
             
         sendEmail(to, subject, emailBody);
@@ -288,7 +284,7 @@ public class EmailService {
             
             String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
             
-            sendHtmlEmail(to, "Your Marketify Password Has Been Reset", emailContent);
+            sendHtmlEmail(to, "Your RIVO9 Password Has Been Reset", emailContent);
             logger.info("Password reset confirmation email sent successfully to: {}", to);
         } catch (IOException e) {
             logger.error("Template error when sending password reset confirmation to {}: {}", to, e.getMessage());
@@ -307,19 +303,19 @@ public class EmailService {
     
     private void sendFallbackPasswordResetConfirmation(String to, String username) {
         logger.info("Sending fallback plain text password reset confirmation to: {}", to);
-        String subject = "Password Reset Confirmation - Marketify";
+        String subject = "Password Reset Confirmation - RIVO9";
         
         String emailBody = """
             Hello %s,
             
-            Your Marketify account password has been successfully reset.
+            Your RIVO9 account password has been successfully reset.
             
             You can now log in with your new password.
             
-            If you didn't reset your password, please contact us immediately at support@marketify.com.
+            If you didn't reset your password, please contact us immediately at support@rivo9.com.
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
             """.formatted(username);
             
         sendEmail(to, subject, emailBody);
@@ -341,7 +337,7 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             
             String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
             
-            sendHtmlEmail(to, "Reset Your Marketify Password", emailContent);
+            sendHtmlEmail(to, "Reset Your RIVO9 Password", emailContent);
             logger.info("Password reset email sent successfully to: {}", to);
         } catch (IOException e) {
             logger.error("Template error when sending password reset email to {}: {}", to, e.getMessage());
@@ -360,12 +356,12 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
     
     private void sendFallbackPasswordResetEmail(String to, String username, String resetToken, String baseUrl) {
         logger.info("Sending fallback plain text password reset email to: {}", to);
-        String subject = "Password Reset - Marketify";
+        String subject = "Password Reset - RIVO9";
 String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);        
         String emailBody = """
             Hello %s,
             
-            You have requested to reset your Marketify password. Click the link below to reset your password:
+            You have requested to reset your RIVO9 password. Click the link below to reset your password:
             
             %s
             
@@ -374,7 +370,7 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             If you didn't request this password reset, please ignore this email.
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
             """.formatted(username, resetUrl);
             
         sendEmail(to, subject, emailBody);
@@ -424,7 +420,7 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             If you didn't request this code, please ignore this email.
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
             """.formatted(username, tfaCode);
             
         sendEmail(to, subject, emailBody);
@@ -469,7 +465,7 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
             %s
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
             """.formatted(username, message);
             
         sendEmail(to, subject, emailBody);
@@ -594,8 +590,8 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
     public boolean testEmailConfiguration(String to) {
         logger.info("Testing email configuration by sending test email to: {}", to);
         try {
-            String subject = "Marketify Email Configuration Test";
-            String text = "This is a test email to verify that the Marketify email configuration is working correctly.";
+            String subject = "RIVO9 Email Configuration Test";
+            String text = "This is a test email to verify that the RIVO9 email configuration is working correctly.";
             
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);

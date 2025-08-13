@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketify Password Reset Successful</title>
+    <title>RIVO9 Password Reset Successful</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -24,21 +24,21 @@
             <div style="max-width: 350px; margin: 0 auto; position: relative; height: 100px;">
                 <!-- Text -->
                 <div style="position: absolute; left: 90px; top: 15px;">
-                    <div style="font-family: Arial, sans-serif; font-size: 32px; font-weight: bold; color: #B3F5FF; margin: 0; line-height: 1;">MARKETIFY</div>
-                    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #00D0FF; letter-spacing: 2px; margin-top: 5px;">BRAND ON DEMAND</div>
+                    <div style="font-family: Arial, sans-serif; font-size: 32px; font-weight: bold; color: #B3F5FF; margin: 0; line-height: 1;">RIVO9</div>
+                    <div style="font-family: Arial, sans-serif; font-size: 12px; color: #00D0FF; letter-spacing: 2px; margin-top: 5px;">INTELLIGENT BRAND API ON DEMAND</div>
                 </div>
             </div>
         </div>
         <div class="content">
             <h1>Password Reset Successful</h1>
-            <p>Your Marketify account password has been successfully updated, ${user.firstName}.</p>
+            <p>Your RIVO9 account password has been successfully updated, ${user.firstName}.</p>
             <p>You can now log in with your new password.</p>
-            <a href="${loginUrl}" class="cta-button">Log In to Marketify</a>
-            <p>If you didn't change your password, please contact us immediately at <a href="mailto:support@marketify.com">support@marketify.com</a>.</p>
+            <a href="${loginUrl}" class="cta-button">Log In to RIVO9</a>
+            <p>If you didn't change your password, please contact us immediately at <a href="mailto:support@rivo9.com">support@rivo9.com</a>.</p>
         </div>
         <div class="footer">
-            <p>Marketify Inc. | #1-58/5/A, 2nd Floor, Opp. Furniture Palace, Above Bank of India, Gachibowli, Hyderabad, India</p>
-            <p><a href="https://marketify.com">marketify.com</a> | <a href="mailto:support@marketify.com">support@marketify.com</a></p>
+            <p>RIVO9 Technologies | Intelligent Brand API Solutions</p>
+            <p><a href="https://rivo9.com">rivo9.com</a> | <a href="mailto:support@rivo9.com">support@rivo9.com</a></p>
         </div>
     </div>
 </body>

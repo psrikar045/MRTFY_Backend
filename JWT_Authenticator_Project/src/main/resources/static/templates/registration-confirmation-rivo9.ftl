@@ -26,7 +26,7 @@
                                     <td style="text-align: center;">
                                         <!-- RIVO9 Logo -->
                                         <div style="font-size: 42px; font-weight: bold; color: #ffffff; margin-bottom: 8px; letter-spacing: 2px;">RIVO9</div>
-                                        <div style="font-size: 14px; color: #e94560; font-weight: 600; letter-spacing: 3px;">INTELLIGENT BRAND API</div>
+                                        <div style="font-size: 14px; color: #e94560; font-weight: 600; letter-spacing: 3px;">INTELLIGENT BRAND API ON DEMAND</div>
                                     </td>
                                 </tr>
                             </table>

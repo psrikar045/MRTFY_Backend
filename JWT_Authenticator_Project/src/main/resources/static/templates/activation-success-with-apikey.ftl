@@ -21,7 +21,7 @@
                                     <td style="text-align: center;">
                                         <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
                                         <div style="font-size: 36px; font-weight: bold; color: #ffffff; margin-bottom: 8px; letter-spacing: 2px;">RIVO9</div>
-                                        <div style="font-size: 14px; color: #ffffff; font-weight: 600; letter-spacing: 3px; opacity: 0.9;">INTELLIGENT BRAND API</div>
+                                        <div style="font-size: 14px; color: #ffffff; font-weight: 600; letter-spacing: 3px; opacity: 0.9;">INTELLIGENT BRAND API ON DEMAND</div>
                                     </td>
                                 </tr>
                             </table>
@@ -36,7 +36,7 @@
                                     <td style="text-align: center;">
                                         <h1 style="color: #28a745; font-size: 32px; margin: 0 0 20px 0; font-weight: 700;">Account Successfully Activated!</h1>
                                         <p style="color: #333333; font-size: 20px; line-height: 1.6; margin: 0 0 30px 0;">
-                                            Welcome to RIVO9, <strong>${(user.firstName)!'there'}</strong>!
+                                            Welcome to RIVO9, <strong>${(user.username)!'there'}</strong>!
                                         </p>
                                         <p style="color: #555555; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
                                             Your account is now fully activated and ready to use. We've automatically set up everything you need to start building with our brand intelligence API.
@@ -147,7 +147,7 @@
                                         <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                                             <tr>
                                                 <td style="background-color: #1a1a2e; padding: 14px 30px; border-radius: 50px;">
-                                                    <a href="${(apiDocsUrl)!'#'}" style="color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600;">
+                                                    <a href="${(loginUrl)!'#'}" style="color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600;">
                                                         View API Docs
                                                     </a>
                                                 </td>
@@ -171,7 +171,7 @@
                                                 <td style="padding: 8px 0; color: #333333; font-size: 15px;">1️⃣ Copy your API key from above</td>
                                             </tr>
                                             <tr>
-                                                <td style="padding: 8px 0; color: #333333; font-size: 15px;">2️⃣ Read our <a href="${(apiDocsUrl)!'#'}" style="color: #e94560; text-decoration: none; font-weight: 600;">API documentation</a></td>
+                                                <td style="padding: 8px 0; color: #333333; font-size: 15px;">2️⃣ Read our <a href="${(loginUrl)!'#'}" style="color: #e94560; text-decoration: none; font-weight: 600;">API documentation</a></td>
                                             </tr>
                                             <tr>
                                                 <td style="padding: 8px 0; color: #333333; font-size: 15px;">3️⃣ Make your first brand extraction call</td>
