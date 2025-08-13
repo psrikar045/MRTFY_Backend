@@ -539,8 +539,39 @@ public class AuthController {
     })
     @GetMapping("/verify-email")
     public ResponseEntity<?> verifyEmail(@Parameter(description = "Email verification token") @RequestParam String token) {
-        String response = authService.verifyEmail(token);
-        return ResponseEntity.ok(response);
+        try {
+            // Process email verification (creates API key + sends email)
+            String response = authService.verifyEmail(token);
+            
+            // ✅ REDIRECT TO ANGULAR LOGIN WITH SUCCESS MESSAGE
+            String angularLoginUrl = "http://202.65.155.117/auth/login";
+            String successMessage = "Account activated successfully! Check your email for API key. Please login to continue.";
+            String encodedMessage = java.net.URLEncoder.encode(successMessage, java.nio.charset.StandardCharsets.UTF_8);
+            
+            // Redirect to Angular with query parameters
+            String redirectUrl = angularLoginUrl + "?activation=success&message=" + encodedMessage;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Location", redirectUrl);
+            
+            log.info("✅ Email verified successfully, redirecting to Angular: {}", redirectUrl);
+            return ResponseEntity.status(HttpStatus.FOUND).headers(headers).build();
+            
+        } catch (Exception e) {
+            log.error("❌ Email verification failed: {}", e.getMessage(), e);
+            
+            // Redirect to Angular login with error message
+            String angularLoginUrl = "http://202.65.155.117/auth/login";
+            String errorMessage = "Activation failed: " + e.getMessage();
+            String encodedError = java.net.URLEncoder.encode(errorMessage, java.nio.charset.StandardCharsets.UTF_8);
+            
+            String redirectUrl = angularLoginUrl + "?activation=error&message=" + encodedError;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Location", redirectUrl);
+            
+            return ResponseEntity.status(HttpStatus.FOUND).headers(headers).build();
+        }
     }
 
     @PostMapping("/forward")

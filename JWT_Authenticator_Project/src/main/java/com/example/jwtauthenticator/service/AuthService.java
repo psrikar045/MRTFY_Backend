@@ -3,11 +3,15 @@ package com.example.jwtauthenticator.service;
 import com.example.jwtauthenticator.config.AppConfig;
 import com.example.jwtauthenticator.dto.*;
 import com.example.jwtauthenticator.dto.RegisterResponse;
+import com.example.jwtauthenticator.dto.ApiKeyCreateRequestDTO;
+import com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO;
+import com.example.jwtauthenticator.entity.ApiKey;
 import com.example.jwtauthenticator.entity.LoginLog;
 import com.example.jwtauthenticator.entity.PasswordResetCode;
 import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.entity.User.AuthProvider;
 import com.example.jwtauthenticator.entity.User.Role;
+import com.example.jwtauthenticator.enums.UserPlan;
 import com.example.jwtauthenticator.model.AuthRequest;
 import com.example.jwtauthenticator.model.AuthResponse;
 import com.example.jwtauthenticator.model.RegisterRequest;
@@ -15,19 +19,21 @@ import com.example.jwtauthenticator.repository.LoginLogRepository;
 import com.example.jwtauthenticator.repository.PasswordResetCodeRepository;
 import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.security.JwtUserDetailsService;
+import com.example.jwtauthenticator.service.ApiKeyService;
 import com.example.jwtauthenticator.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +76,9 @@ public class AuthService {
     @Autowired
     private IdGeneratorService idGeneratorService;
 
+    @Autowired
+    private ApiKeyService apiKeyService;
+
     @Transactional
     public RegisterResponse registerUser(RegisterRequest request) {
         // First check if username already exists across all brands
@@ -104,7 +113,7 @@ public class AuthService {
         User newUser = User.builder()
                 .id(brandId) // Set as primary key
                 .username(request.username())
-                .password(request.password()) // Don't encode here, JwtUserDetailsService.save() will encode it
+                .password(passwordEncoder.encode(request.password())) // ✅ FIX: Encode password since we're using userRepository.save()
                 .email(request.email())
                 .firstName(request.firstName())
                 .lastName(request.lastName())
@@ -120,7 +129,8 @@ public class AuthService {
         String verificationToken = UUID.randomUUID().toString();
         newUser.setVerificationToken(verificationToken);
 
-        userDetailsService.save(newUser);
+        // ✅ FIX: Use userRepository.save() to ensure verification_token is saved
+        userRepository.save(newUser);
 
         String baseUrl = appConfig.getApiUrl("");
         emailService.sendVerificationEmail(newUser.getEmail(), newUser.getUsername(), verificationToken, baseUrl);
@@ -312,14 +322,134 @@ public class AuthService {
         return new AuthResponse(newToken, newRefreshToken, user.getBrandId(), jwtUtil.getAccessTokenExpirationTimeInSeconds());
     }
 
+    @Transactional
     public String verifyEmail(String token) {
+        log.info("🔐 Starting email verification for token: {}", token);
+        
         User user = userRepository.findByVerificationToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid verification token"));
+                .orElseThrow(() -> {
+                    log.error("❌ Invalid verification token: {}", token);
+                    return new RuntimeException("Invalid verification token");
+                });
 
+        log.info("✅ Found user for verification: {} ({})", user.getUsername(), user.getId());
+        
+        // Activate user account
         user.setEmailVerified(true);
         user.setVerificationToken(null); // Clear the token after verification
-        userRepository.save(user);
-        return "Email verified successfully!";
+        user.setPlan(UserPlan.FREE); // Ensure FREE plan is set
+        user.setPlanStartedAt(LocalDateTime.now());
+        
+        User savedUser = userRepository.save(user);
+        log.info("✅ User account activated: {} - Email verified: {}, Plan: {}", 
+            savedUser.getUsername(), savedUser.isEmailVerified(), savedUser.getPlan());
+
+        try {
+            // AUTO-GENERATE FREE TIER API KEY with rivo9 prefix and default domain
+            log.info("🔧 Creating default API key for verified user...");
+            ApiKeyGeneratedResponseDTO apiKey = createDefaultApiKeyForUser(savedUser);
+            
+            // Send activation success email with API key
+            log.info("📧 Sending activation success email...");
+            sendActivationSuccessEmail(savedUser, apiKey);
+            
+            log.info("🎉 Email verification process completed successfully for user: {}", savedUser.getUsername());
+            return "Account activated successfully! Check your email for your API key and next steps.";
+        } catch (Exception e) {
+            log.error("❌ Failed to complete activation process for user {}: {}", user.getUsername(), e.getMessage(), e);
+            throw new RuntimeException("Account activated but failed to create API key: " + e.getMessage());
+        }
+    }
+
+    private ApiKeyGeneratedResponseDTO createDefaultApiKeyForUser(User user) {
+        try {
+            // Use default domain for free accounts (can be updated later via dashboard)
+            String defaultDomain = "example.com"; 
+            
+            // ✅ CRITICAL FIX: Use proper scopes that match ApiKeyScope enum
+            List<String> defaultFreeScopes = Arrays.asList(
+                "READ_BASIC",      // Basic read access to public data
+                "DOMAIN_HEALTH",   // Access domain health monitoring  
+                "READ_BRANDS"      // Read brand information and assets
+            );
+            
+            // Create unique API key name to avoid duplicates
+            String uniqueKeyName = "Default Free API Key - " + user.getUsername();
+            
+            log.info("🔧 Creating default API key for user: {} (ID: {}) with domain: {}", 
+                user.getUsername(), user.getId(), defaultDomain);
+            log.info("📋 Request details - Name: {}, Prefix: {}, Tier: {}, Scopes: {}", 
+                uniqueKeyName, "rivo9", "FREE_TIER", defaultFreeScopes);
+            
+            ApiKeyCreateRequestDTO request = ApiKeyCreateRequestDTO.builder()
+                .name(uniqueKeyName)
+                .description("Auto-generated API key for Free tier access - 100 calls/month")
+                .registeredDomain(defaultDomain) // REQUIRED field
+                .prefix("rivo9")
+                .rateLimitTier("FREE_TIER")
+                .scopes(defaultFreeScopes)  // ✅ FIXED: Valid ApiKeyScope enum values
+                .build();
+            
+            log.info("✅ Calling apiKeyService.createApiKey with userFkId: {}", user.getId());
+            ApiKeyGeneratedResponseDTO result = apiKeyService.createApiKey(user.getId(), request);
+            log.info("🎉 Successfully created API key: {}", result.getPrefix());
+            return result;
+        } catch (IllegalArgumentException e) {
+            log.error("❌ Validation error creating API key for user {}: {}", user.getUsername(), e.getMessage());
+            throw new RuntimeException("Validation failed during API key creation: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("❌ Unexpected error creating API key for user {}: {}", user.getUsername(), e.getMessage(), e);
+            throw new RuntimeException("Failed to create API key during activation: " + e.getMessage());
+        }
+    }
+
+    private void sendActivationSuccessEmail(User user, ApiKeyGeneratedResponseDTO apiKey) {
+        try {
+            // Validate required data before creating model
+            if (user == null) {
+                log.error("Cannot send activation email: user is null");
+                return;
+            }
+            if (apiKey == null) {
+                log.error("Cannot send activation email: apiKey is null for user {}", user.getUsername());
+                return;
+            }
+            
+            // ✅ SECURITY FIX: Create secure API key data for email (preview only)
+            Map<String, Object> secureApiKeyData = new HashMap<>();
+            secureApiKeyData.put("name", apiKey.getName());
+            secureApiKeyData.put("preview", ApiKey.generateKeyPreview(apiKey.getKeyValue())); // Only preview
+            secureApiKeyData.put("environment", "Testing"); // Default environment
+            secureApiKeyData.put("tier", "FREE_TIER");
+            
+            Map<String, Object> model = new HashMap<>();
+            model.put("user", user);
+            model.put("apiKey", secureApiKeyData);  // ✅ SECURE: Only preview data, NOT full key!
+            model.put("userPlan", user.getPlan() != null ? user.getPlan() : com.example.jwtauthenticator.enums.UserPlan.FREE);
+            
+            // ✅ FRONTEND URL FIX: Use correct frontend URLs
+            String loginUrl = "http://202.65.155.117/auth/login";  // ✅ FIXED: Frontend login URL
+            String dashboardUrl = "http://202.65.155.117/dashboard/api-keys";  // ✅ FIXED: Frontend dashboard URL
+            String apiDocsUrl = appConfig.getApiUrl("/docs");
+            
+            model.put("loginUrl", loginUrl);
+            model.put("dashboardUrl", dashboardUrl);
+            model.put("apiDocsUrl", apiDocsUrl);
+            
+            log.info("📧 EMAIL URLS for {}: Login={}, Dashboard={}, Docs={}", 
+                    user.getUsername(), loginUrl, dashboardUrl, apiDocsUrl);
+            
+            emailService.sendActivationSuccessEmail(
+                user.getEmail(), 
+                user.getUsername(), 
+                model
+            );
+            
+            log.info("Activation success email sent to user: {}", user.getUsername());
+        } catch (Exception e) {
+            log.error("Failed to send activation success email to {}: {}", user.getUsername(), e.getMessage());
+            // Don't fail the activation process if email fails
+        }
     }
 
     private void authenticate(String username, String password, String email) throws Exception {

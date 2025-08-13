@@ -151,11 +151,11 @@ public class EmailService {
             model.put("loginUrl", buildUrl("/login"));
             
             Configuration configuration = freeMarkerConfigurer.getConfiguration();
-            Template template = configuration.getTemplate("registration-confirmation.ftl");
+            Template template = configuration.getTemplate("registration-confirmation-rivo9.ftl");
             
             String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
             
-            sendHtmlEmail(to, "Welcome to Marketify - Confirm Your Email", emailContent);
+            sendHtmlEmail(to, "Welcome to RIVO9 - Activate Your Account", emailContent);
             logger.info("Verification email sent successfully to: {}", to);
         } catch (IOException e) {
             logger.error("Template error when sending verification email to {}: {}", to, e.getMessage());
@@ -174,22 +174,41 @@ public class EmailService {
     
     private void sendFallbackVerificationEmail(String to, String username, String verificationToken, String baseUrl) {
         logger.info("Sending fallback plain text verification email to: {}", to);
-        String subject = "Email Verification - Marketify";
+        String subject = "Welcome to RIVO9 - Activate Your Account";
         String verificationUrl = baseUrl + "/auth/verify-email?token=" + verificationToken;
         
         String emailBody = """
-            Hello %s,
+            Welcome to RIVO9!
             
-            Welcome to Marketify! Please verify your email address by clicking the link below:
+            Hi %s,
             
-            %s
+            Thank you for joining RIVO9! You're just one click away from accessing our powerful brand intelligence API platform.
             
-            This link will expire in 24 hours for security reasons.
+            🚀 Your FREE Account Includes:
+            ✅ 100 API calls per month
+            ✅ Auto-generated API key (rivo9 prefix)
+            ✅ Brand intelligence extraction
+            ✅ Community support access
+            
+            Activate your account: %s
+            
+            What happens next?
+            1. Click the activation link above
+            2. Receive your activation success email
+            3. Get your FREE API key automatically
+            4. Start making API calls immediately!
+            
+            This link expires in 24 hours for security.
             
             If you didn't create this account, please ignore this email.
             
             Best regards,
-            Marketify Team
+            RIVO9 Team
+            
+            --
+            RIVO9 Technologies
+            Building intelligent brand APIs for the modern web
+            https://rivo9.com | support@rivo9.com
             """.formatted(username, verificationUrl);
             
         sendEmail(to, subject, emailBody);
@@ -489,6 +508,80 @@ String resetUrl = buildUrl("/auth/reset-password?token=" + resetToken);
      * Check if email service is enabled and configured
      * @return true if email service is enabled, false otherwise
      */
+    public void sendActivationSuccessEmail(String to, String username, Map<String, Object> model) {
+        logger.info("Sending activation success email with API key to: {}", to);
+        logger.debug("Model data - User: {}, ApiKey: {}, UserPlan: {}", 
+                    model.get("user") != null, 
+                    model.get("apiKey") != null, 
+                    model.get("userPlan") != null);
+        try {
+            Configuration configuration = freeMarkerConfigurer.getConfiguration();
+            Template template = configuration.getTemplate("activation-success-with-apikey.ftl");
+            
+            String emailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
+            
+            sendHtmlEmail(to, "🎉 Welcome to RIVO9 - Your Account is Ready!", emailContent);
+            logger.info("Activation success email sent successfully to: {}", to);
+        } catch (IOException e) {
+            logger.error("Template I/O error when sending activation success email to {}: {}", to, e.getMessage());
+            sendFallbackActivationSuccessEmail(to, username, (com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO) model.get("apiKey"));
+        } catch (freemarker.template.TemplateException e) {
+            logger.error("Template processing error when sending activation success email to {}: {}", to, e.getMessage());
+            sendFallbackActivationSuccessEmail(to, username, (com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO) model.get("apiKey"));
+        } catch (MessagingException e) {
+            logger.error("Messaging error when sending activation success email to {}: {}", to, e.getMessage());
+            sendFallbackActivationSuccessEmail(to, username, (com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO) model.get("apiKey"));
+        } catch (Exception e) {
+            logger.error("Unexpected error when sending activation success email to {}: {}", to, e.getMessage());
+            sendFallbackActivationSuccessEmail(to, username, (com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO) model.get("apiKey"));
+        }
+    }
+
+    private void sendFallbackActivationSuccessEmail(String to, String username, com.example.jwtauthenticator.dto.ApiKeyGeneratedResponseDTO apiKey) {
+        logger.info("Sending fallback activation success email to: {}", to);
+        String subject = "🎉 Welcome to RIVO9 - Your Account is Ready!";
+        
+        String emailBody = String.format("""
+            Hi %s,
+            
+            Welcome to RIVO9! Your account is now fully activated and ready to use.
+            
+            ACCOUNT STATUS:
+            ✅ Email verified
+            ✅ FREE plan activated (100 API calls/month)
+            ✅ API key automatically generated
+            ✅ Ready to make API calls
+            
+            YOUR FREE API KEY:
+            %s
+            
+            Keep this key secure! You can view it anytime in your dashboard.
+            
+            QUICK START:
+            1. Copy your API key from above
+            2. Read our API documentation: %s/docs
+            3. Make your first brand extraction call
+            4. Monitor usage in your dashboard: %s/dashboard
+            
+            Login to your account: %s/login
+            
+            Need help? Contact us at support@rivo9.com
+            
+            --
+            RIVO9 Technologies
+            Building intelligent brand APIs for the modern web
+            https://rivo9.com
+            """, 
+            username, 
+            apiKey != null ? apiKey.getKeyValue() : "[API Key Generation Failed]",
+            baseUrl,
+            baseUrl,
+            baseUrl
+        );
+        
+        sendEmail(to, subject, emailBody);
+    }
+
     public boolean isEmailServiceEnabled() {
         return mailSender != null && fromEmail != null && !fromEmail.trim().isEmpty();
     }

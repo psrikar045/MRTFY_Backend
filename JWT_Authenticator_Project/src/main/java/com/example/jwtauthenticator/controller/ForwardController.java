@@ -2,11 +2,17 @@ package com.example.jwtauthenticator.controller;
 
 import com.example.jwtauthenticator.dto.ForwardRequest;
 import com.example.jwtauthenticator.entity.ApiKey;
+import com.example.jwtauthenticator.entity.User;
 import com.example.jwtauthenticator.dto.BrandExtractionResponse;
+import com.example.jwtauthenticator.enums.UserPlan;
+import com.example.jwtauthenticator.repository.UserRepository;
 import com.example.jwtauthenticator.service.ApiKeyAuthenticationService;
 import com.example.jwtauthenticator.service.ForwardService;
+import com.example.jwtauthenticator.service.ForwardUsageValidationService;
+import com.example.jwtauthenticator.service.ForwardJwtUsageTrackingService;
 import com.example.jwtauthenticator.service.RateLimiterService;
 import com.example.jwtauthenticator.service.ProfessionalRateLimitService;
+import com.example.jwtauthenticator.service.StreamlinedUsageTracker;
 import com.example.jwtauthenticator.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.ConsumptionProbe;
@@ -52,6 +58,10 @@ public class ForwardController {
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final ApiKeyAuthenticationService apiKeyAuthenticationService;
+    private final ForwardUsageValidationService forwardUsageValidationService;
+    private final ForwardJwtUsageTrackingService forwardJwtUsageTrackingService;
+    private final StreamlinedUsageTracker streamlinedUsageTracker;
+    private final UserRepository userRepository;
 
     @PostMapping
     @Operation(
@@ -100,6 +110,7 @@ public class ForwardController {
         String apiKeyId = null;
         String authMethod = "JWT"; // Default to JWT
         ApiKey apiKey = null; // Store the full API key object
+        UserPlan userPlan = UserPlan.FREE; // Default plan
         
         try {
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
@@ -107,6 +118,20 @@ public class ForwardController {
                 String token = authHeader.substring(7);
                 userId = jwtUtil.extractUserId(token);
                 authMethod = "JWT";
+                
+                // Get user plan for JWT users
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null) {
+                    userPlan = user.getPlan() != null ? user.getPlan() : UserPlan.FREE;
+                }
+                
+                // PHASE 2: Plan-based validation for JWT users
+                ForwardUsageValidationService.ValidationResult validation = 
+                    forwardUsageValidationService.validateApiCallLimit(userId, userPlan);
+                if (!validation.isAllowed()) {
+                    log.warn("JWT usage limit exceeded for user {} (plan: {}): {}", userId, userPlan.getDisplayName(), validation.getReason());
+                    return buildError(validation.getReason(), HttpStatus.TOO_MANY_REQUESTS);
+                }
                 
                 // For JWT, use existing rate limiter
                 ConsumptionProbe probe = rateLimiterService.consume(userId);
@@ -132,6 +157,20 @@ public class ForwardController {
                 apiKey = authResult.getApiKey(); // Store the full API key object
                 apiKeyId = apiKey.getId().toString();
                 authMethod = "API_KEY";
+                
+                // Get user plan for API key users
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null) {
+                    userPlan = user.getPlan() != null ? user.getPlan() : UserPlan.FREE;
+                }
+                
+                // PHASE 2: Plan-based validation for API key users
+                ForwardUsageValidationService.ValidationResult validation = 
+                    forwardUsageValidationService.validateApiCallLimit(userId, userPlan);
+                if (!validation.isAllowed()) {
+                    log.warn("API key usage limit exceeded for user {} (plan: {}): {}", userId, userPlan.getDisplayName(), validation.getReason());
+                    return buildError(validation.getReason(), HttpStatus.TOO_MANY_REQUESTS);
+                }
                 
                 // Apply professional rate limiting for API keys
                 ProfessionalRateLimitService.RateLimitResult rateLimitResult = 
@@ -169,35 +208,68 @@ public class ForwardController {
         }
 
         try {
-            // Use appropriate forward method based on authentication type
+            // PHASE 2: Use consistent forwarding with usage tracking
             CompletableFuture<ResponseEntity<String>> future;
             if (apiKey != null) {
-                // API key authentication - use forwardWithLogging
+                // API key authentication - use forwardWithLogging (same as /rivofetech)
                 future = forwardService.forwardWithLogging(request.url(), httpRequest, httpResponse, apiKey);
             } else {
-                // JWT authentication - use forwardWithPublicLogging (no API key)
+                // JWT authentication - use forwardWithPublicLogging but ADD usage tracking
                 future = forwardService.forwardWithPublicLogging(request.url(), httpRequest, httpResponse);
             }
-            ResponseEntity<String> extResponse = future.get();
-            log.info("userId={} | authMethod={} | url={} | status={} | duration={}ms", 
-                    userId, authMethod, request.url(), extResponse.getStatusCode().value(), System.currentTimeMillis() - start);
             
+            ResponseEntity<String> extResponse = future.get();
+            long duration = System.currentTimeMillis() - start;
+            
+            log.info("userId={} | authMethod={} | plan={} | url={} | status={} | duration={}ms", 
+                    userId, authMethod, userPlan.getDisplayName(), request.url(), 
+                    extResponse.getStatusCode().value(), duration);
+            
+            // PHASE 2: Track usage in same tables as /rivofetech
             if (extResponse.getStatusCode().is2xxSuccessful()) {
+                trackApiUsage(userId, userPlan, apiKey, request.url(), httpRequest, 
+                            extResponse.getStatusCode().value(), duration, null);
+                
                 // Parse the response into BrandExtractionResponse object
                 try {
                     BrandExtractionResponse brandResponse = objectMapper.readValue(extResponse.getBody(), BrandExtractionResponse.class);
                     return ResponseEntity.ok(brandResponse);
                 } catch (Exception parseException) {
                     log.error("Failed to parse external API response as BrandExtractionResponse for URL: {}", request.url(), parseException);
+                    
+                    // Track the parsing error
+                    trackApiUsage(userId, userPlan, apiKey, request.url(), httpRequest, 
+                                500, duration, "Failed to parse external API response");
+                    
                     return buildError("Failed to parse external API response", HttpStatus.INTERNAL_SERVER_ERROR);
                 }
+            } else {
+                // Track failed response
+                trackApiUsage(userId, userPlan, apiKey, request.url(), httpRequest, 
+                            extResponse.getStatusCode().value(), duration, 
+                            "External API error: " + extResponse.getBody());
             }
+            
             return ResponseEntity.status(extResponse.getStatusCode())
                     .body(buildErrorMap("External API error: " + extResponse.getBody(), extResponse.getStatusCode()));
         } catch (Exception e) {
-            log.error("userId={} | authMethod={} | url={} | error={}", userId, authMethod, request.url(), e.getMessage());
+            long duration = System.currentTimeMillis() - start;
+            log.error("userId={} | authMethod={} | plan={} | url={} | error={}", 
+                     userId, authMethod, userPlan.getDisplayName(), request.url(), e.getMessage());
+            
+            // Track the error
+            String errorMessage = e.getMessage();
+            int errorStatus = 500;
             if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
-                return buildError("External API timed out after " + forwardService.getForwardConfig().getTimeoutSeconds() + " seconds", HttpStatus.GATEWAY_TIMEOUT);
+                errorMessage = "External API timed out after " + forwardService.getForwardConfig().getTimeoutSeconds() + " seconds";
+                errorStatus = 504;
+            }
+            
+            trackApiUsage(userId, userPlan, apiKey, request.url(), httpRequest, 
+                        errorStatus, duration, errorMessage);
+            
+            if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
+                return buildError(errorMessage, HttpStatus.GATEWAY_TIMEOUT);
             }
             return buildError("External API error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -215,6 +287,75 @@ public class ForwardController {
         body.put("status", status.value());
         body.put("timestamp", Instant.now().toString());
         return body;
+    }
+
+    /**
+     * Track API usage in same tables as /rivofetech for consistency
+     */
+    private void trackApiUsage(String userId, UserPlan userPlan, ApiKey apiKey, String url, 
+                             HttpServletRequest request, int responseStatus, long responseTimeMs, 
+                             String errorMessage) {
+        try {
+            if (apiKey != null) {
+                // For API key requests - use StreamlinedUsageTracker (same as /rivofetech)
+                streamlinedUsageTracker.trackRivofetchCallSync(
+                    apiKey.getId(),
+                    userId,
+                    getClientIpAddress(request),
+                    extractDomainFromRequest(request),
+                    request.getHeader("User-Agent"),
+                    responseStatus,
+                    responseTimeMs,
+                    errorMessage
+                );
+                log.debug("✅ API key usage tracked for /forward: apiKey={}, status={}", apiKey.getId(), responseStatus);
+            } else {
+                // For JWT requests - use JWT usage tracking service
+                forwardJwtUsageTrackingService.trackJwtUsage(
+                    userId, userPlan, url, request, responseStatus, responseTimeMs, errorMessage
+                );
+                log.debug("✅ JWT usage tracked for /forward: user={}, plan={}, status={}", 
+                         userId, userPlan.getDisplayName(), responseStatus);
+            }
+        } catch (Exception e) {
+            log.error("❌ Failed to track /forward usage: userId={}, apiKey={}, error={}", 
+                     userId, apiKey != null ? apiKey.getId() : null, e.getMessage());
+            // Don't throw - we don't want to break the API call due to tracking issues
+        }
+    }
+
+    /**
+     * Extract client IP address from request
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
+    }
+
+    /**
+     * Extract domain from request headers
+     */
+    private String extractDomainFromRequest(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.isEmpty()) {
+            return origin.replaceAll("https?://", "");
+        }
+        
+        String referer = request.getHeader("Referer");
+        if (referer != null && !referer.isEmpty()) {
+            return referer.replaceAll("https?://", "").split("/")[0];
+        }
+        
+        return request.getServerName();
     }
 
 }

@@ -29,12 +29,16 @@ public class ApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
     private final UserRepository userRepository; // Inject UserRepository to fetch User by String ID
     private final ApiKeyHashUtil apiKeyHashUtil;
+    private final com.example.jwtauthenticator.util.DomainExtractionUtil domainExtractionUtil; // ✅ Use existing service
 
     @Autowired
-    public ApiKeyService(ApiKeyRepository apiKeyRepository, UserRepository userRepository, ApiKeyHashUtil apiKeyHashUtil) {
+    public ApiKeyService(ApiKeyRepository apiKeyRepository, UserRepository userRepository, 
+                        ApiKeyHashUtil apiKeyHashUtil, 
+                        com.example.jwtauthenticator.util.DomainExtractionUtil domainExtractionUtil) {
         this.apiKeyRepository = apiKeyRepository;
         this.userRepository = userRepository; // Initialize UserRepository
         this.apiKeyHashUtil = apiKeyHashUtil;
+        this.domainExtractionUtil = domainExtractionUtil; // ✅ Initialize existing service
     }
 
     private String generateSecureApiKey(String prefix) {
@@ -54,9 +58,9 @@ public class ApiKeyService {
             throw new IllegalArgumentException("API key name cannot be null or empty");
         }
         
-        // Validate if the userFkId exists in the User table's 'id' column
-        User user = userRepository.findById(userFkId) // Use findById for the primary key lookup
-                      .orElseThrow(() -> new IllegalArgumentException("User with ID " + userFkId + " not found."));
+        // // Validate if the userFkId exists in the User table's 'id' column
+        // User user = userRepository.findById(userFkId) // Use findById for the primary key lookup
+        //               .orElseThrow(() -> new IllegalArgumentException("User with ID " + userFkId + " not found."));
       
         // Check for duplicate API key names for this user
         if (apiKeyRepository.existsByNameAndUserFkId(request.getName().trim(), userFkId)) {
@@ -106,6 +110,33 @@ public class ApiKeyService {
                     request.getName(), expirationDate);
         }
 
+        // Generate key preview for security
+        String keyPreview = ApiKey.generateKeyPreview(generatedKeyValue);
+        
+        // ✅ Extract main domain using EXISTING service
+        String mainDomain = null;
+        String subdomainPattern = null;
+        if (request.getRegisteredDomain() != null && !request.getRegisteredDomain().trim().isEmpty()) {
+            try {
+                mainDomain = domainExtractionUtil.extractMainDomain(request.getRegisteredDomain());
+                // Generate subdomain pattern: *.xamplyfy.com
+                subdomainPattern = "*." + mainDomain;
+            } catch (Exception e) {
+                log.warn("Failed to extract main domain from {}: {}", request.getRegisteredDomain(), e.getMessage());
+            }
+        }
+        
+        // ✅ Placeholder encryption - Base64 encode for now (TODO: proper AES encryption)
+        String encryptedKey = null;
+        try {
+            encryptedKey = java.util.Base64.getEncoder().encodeToString(generatedKeyValue.getBytes());
+        } catch (Exception e) {
+            log.warn("Failed to encode API key for user {}: {}", userFkId, e.getMessage());
+        }
+        
+        log.info("🔧 Creating API key with missing fields - Preview: {}, MainDomain: {}, SubdomainPattern: {}", 
+                keyPreview, mainDomain, subdomainPattern);
+        
         ApiKey apiKey = ApiKey.builder()
                 .userFkId(userFkId) // Set the String user ID
                 .keyHash(keyHash) // Store the hash instead of plain key
@@ -120,6 +151,11 @@ public class ApiKeyService {
                 .rateLimitTier(request.getRateLimitTier() != null && !request.getRateLimitTier().trim().isEmpty() ? 
                               RateLimitTier.valueOf(request.getRateLimitTier().toUpperCase().trim()) : RateLimitTier.FREE_TIER)
                 .scopes(request.getScopes() != null ? String.join(",", request.getScopes()) : null)
+                .keyPreview(keyPreview) // Masked preview for display
+                .environment(com.example.jwtauthenticator.enums.ApiKeyEnvironment.TESTING) // ✅ DEFAULT TO TESTING
+                .mainDomain(mainDomain) // Extracted main domain
+                .subdomainPattern(subdomainPattern) // Generated subdomain pattern
+                .encryptedKeyValue(encryptedKey) // Encrypted key for secure retrieval
                 .build();
 
         try {

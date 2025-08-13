@@ -23,8 +23,11 @@ public class FreemarkerConfig {
         configurer.setDefaultEncoding(charset);
         
         Properties settings = new Properties();
-        settings.setProperty("auto_import", "spring.ftl as spring");
-        settings.setProperty("template_exception_handler", "rethrow");
+        // Removed spring.ftl auto-import as it doesn't exist and breaks template processing
+        settings.setProperty("template_exception_handler", "debug");
+        settings.setProperty("number_format", "computer");
+        settings.setProperty("datetime_format", "iso");
+        settings.setProperty("whitespace_stripping", "true");
         configurer.setFreemarkerSettings(settings);
         
         return configurer;
